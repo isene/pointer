@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#0a0a14"/>
+    </linearGradient>
+    <linearGradient id="rust" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f74c00"/>
+      <stop offset="100%" style="stop-color:#b7410e"/>
+    </linearGradient>
+  </defs>
+  <style>
+    @keyframes highlight { 0%,100% { fill: #f74c00; opacity: 0.3; } 50% { fill: #f74c00; opacity: 0.6; } }
+    .sel { animation: highlight 2s ease-in-out infinite; }
+  </style>
+  <circle cx="128" cy="128" r="120" fill="url(#bg)" stroke="url(#rust)" stroke-width="3"/>
+  <!-- Two-pane file manager -->
+  <rect x="42" y="52" width="172" height="120" rx="6" fill="#0d0d0d" stroke="#f74c00" stroke-width="1.5"/>
+  <!-- Title bar -->
+  <rect x="42" y="52" width="172" height="16" rx="6" fill="#1a1a2e"/>
+  <rect x="42" y="62" width="172" height="6" fill="#1a1a2e"/>
+  <circle cx="54" cy="60" r="3" fill="#e55"/>
+  <circle cx="64" cy="60" r="3" fill="#e2b714"/>
+  <circle cx="74" cy="60" r="3" fill="#4c4"/>
+  <!-- Divider -->
+  <line x1="128" y1="68" x2="128" y2="172" stroke="#f74c00" stroke-width="0.8" opacity="0.5"/>
+  <!-- Left pane: file list -->
+  <rect class="sel" x="48" y="74" width="76" height="10" rx="2" opacity="0.4"/>
+  <text x="52" y="82" font-family="monospace" font-size="8" fill="#51afef">src/</text>
+  <text x="52" y="94" font-family="monospace" font-size="8" fill="#4c4">Cargo.toml</text>
+  <text x="52" y="106" font-family="monospace" font-size="8" fill="#aab">README.md</text>
+  <text x="52" y="118" font-family="monospace" font-size="8" fill="#aab">LICENSE</text>
+  <text x="52" y="130" font-family="monospace" font-size="8" fill="#51afef">img/</text>
+  <text x="52" y="142" font-family="monospace" font-size="8" fill="#e2b714">build.rs</text>
+  <!-- Right pane: preview -->
+  <text x="134" y="82" font-family="monospace" font-size="7" fill="#f74c00">main.rs</text>
+  <rect x="134" y="88" width="70" height="2" rx="1" fill="#aab" opacity="0.3"/>
+  <rect x="134" y="94" width="60" height="2" rx="1" fill="#aab" opacity="0.3"/>
+  <rect x="134" y="100" width="65" height="2" rx="1" fill="#4c4" opacity="0.4"/>
+  <rect x="134" y="106" width="55" height="2" rx="1" fill="#aab" opacity="0.3"/>
+  <rect x="134" y="112" width="68" height="2" rx="1" fill="#aab" opacity="0.3"/>
+  <rect x="134" y="118" width="50" height="2" rx="1" fill="#aab" opacity="0.3"/>
+  <!-- Status bar -->
+  <rect x="42" y="160" width="172" height="12" fill="#1a1a2e"/>
+  <text x="50" y="169" font-family="monospace" font-size="6" fill="#888">6 items | 2.4MB | src/</text>
+  <text x="128" y="206" font-family="monospace" font-size="18" font-weight="bold" fill="url(#rust)" text-anchor="middle" letter-spacing="2">pointer</text>
+  <text x="128" y="224" font-family="monospace" font-size="8" fill="#888" text-anchor="middle">terminal file manager</text>
+</svg>
