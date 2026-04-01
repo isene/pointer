@@ -1,0 +1,12 @@
+[package]
+name = "pointer"
+version = "0.1.0"
+edition = "2024"
+authors = ["Geir Isene <g@isene.com>"]
+description = "Fast terminal file manager. Feature clone of RTFM, built on crust."
+license = "Unlicense"
+repository = "https://github.com/isene/pointer"
+
+[dependencies]
+crust = { path = "../crust" }
+libc = "0.2"
