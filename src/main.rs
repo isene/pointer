@@ -1,339 +1,216 @@
-use crust::{Crust, Pane, Input};
-use crust::style;
-use crust::pane::Align;
-use std::env;
-use std::fs;
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+mod ai;
+mod app;
+mod archive;
+mod command;
+mod config;
+mod entry;
+mod git;
+mod help;
+mod image;
+mod marks;
+mod ops;
+mod plugin;
+mod preview;
+mod search;
+mod ssh;
+mod tabs;
+mod undo;
 
-struct App {
-    top: Pane,
-    left: Pane,
-    right: Pane,
-    status: Pane,
-    files: Vec<DirEntry>,
-    index: usize,
-    cols: u16,
-    rows: u16,
-}
-
-struct DirEntry {
-    name: String,
-    path: PathBuf,
-    is_dir: bool,
-    is_symlink: bool,
-    is_exec: bool,
-    size: u64,
-}
+use crust::{Crust, Input};
 
 fn main() {
+    config::ensure_dirs();
+
+    // Parse --pick argument
+    let mut pick_output = None;
+    let mut start_dir = None;
+    for arg in std::env::args().skip(1) {
+        if arg.starts_with("--pick=") {
+            pick_output = Some(arg[7..].to_string());
+        } else if !arg.starts_with('-') {
+            start_dir = Some(arg);
+        }
+    }
+    if let Some(ref dir) = start_dir {
+        let _ = std::env::set_current_dir(dir);
+    }
+
     Crust::init();
-    let (cols, rows) = Crust::terminal_size();
 
-    let mut app = App {
-        top: Pane::new(1, 1, cols, 1, 252, 236),
-        left: Pane::new(1, 2, cols / 2, rows - 2, 255, 0),
-        right: Pane::new(cols / 2 + 1, 2, cols - cols / 2, rows - 2, 252, 0),
-        status: Pane::new(1, rows, cols, 1, 0, 252),
-        files: Vec::new(),
-        index: 0,
-        cols,
-        rows,
-    };
-
-    app.left.border = true;
-    app.left.border_refresh();
-    app.right.border = true;
-    app.right.border_refresh();
-
-    app.load_dir();
+    let mut app = app::App::new();
+    app.pick_output = pick_output;
     app.render();
 
     loop {
-        if let Some(key) = Input::getchr(None) {
-            match key.as_str() {
-                "q" | "ESC" => break,
-                "j" | "DOWN" => {
-                    if app.index < app.files.len().saturating_sub(1) {
-                        app.index += 1;
-                        app.render();
-                    }
+        app.check_file_op();
+        // 2-second idle refresh (1s during async ops) to catch filesystem changes
+        let timeout = if app.file_op_running() { Some(1) } else { Some(2) };
+        let key = match Input::getchr(timeout) {
+            Some(k) => k,
+            None => { app.render(); continue; } // Idle timeout: re-render and wait again
+        };
+
+        match key.as_str() {
+            // --- BASIC ---
+            "?" => { app.show_help(); }
+            "v" => { app.show_version(); }
+            "r" => { app.refresh(); app.render(); }
+            "R" => { app.reload_config(); app.render(); }
+            "C" => { app.show_config(); }
+            "W" => { app.write_config(); }
+            "V" => { app.plugin_manager(); }
+            "q" => {
+                app.save_and_quit();
+                // Write pick output if in pick mode
+                if let Some(ref path) = app.pick_output {
+                    let lines: Vec<String> = app.tagged.iter()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .collect();
+                    let _ = std::fs::write(path, lines.join("\n"));
                 }
-                "k" | "UP" => {
-                    if app.index > 0 {
-                        app.index -= 1;
-                        app.render();
-                    }
-                }
-                "ENTER" | "l" | "RIGHT" => {
-                    if let Some(entry) = app.files.get(app.index) {
-                        if entry.is_dir {
-                            let path = entry.path.clone();
-                            let _ = env::set_current_dir(&path);
-                            app.index = 0;
-                            app.left.ix = 0;
-                            app.load_dir();
-                            app.render();
-                        }
-                    }
-                }
-                "h" | "LEFT" | "BACK" => {
-                    // Go up one directory
-                    if let Ok(cwd) = env::current_dir() {
-                        if let Some(parent) = cwd.parent() {
-                            let _ = env::set_current_dir(parent);
-                            app.index = 0;
-                            app.left.ix = 0;
-                            app.load_dir();
-                            app.render();
-                        }
-                    }
-                }
-                "g" => {
-                    app.index = 0;
-                    app.left.ix = 0;
-                    app.render();
-                }
-                "G" => {
-                    app.index = app.files.len().saturating_sub(1);
-                    app.render();
-                }
-                "PgDOWN" | " " => {
-                    let page = (app.rows - 4) as usize;
-                    app.index = (app.index + page).min(app.files.len().saturating_sub(1));
-                    app.render();
-                }
-                "PgUP" => {
-                    let page = (app.rows - 4) as usize;
-                    app.index = app.index.saturating_sub(page);
-                    app.render();
-                }
-                "RESIZE" => {
-                    let (cols, rows) = Crust::terminal_size();
-                    app.cols = cols;
-                    app.rows = rows;
-                    app.resize();
-                    app.render();
-                }
-                _ => {}
+                break;
             }
+            "Q" => break,
+
+            // --- LAYOUT ---
+            "w" => { app.change_width(); app.render(); }
+            "B" => { app.toggle_border(); app.render(); }
+            "-" => { app.toggle_preview(); app.render(); }
+            "_" => { app.toggle_image(); app.render(); }
+            "b" => { app.toggle_bat(); app.force_render_right(); }
+
+            // --- MOTION ---
+            "j" | "DOWN" | "C-DOWN" => { app.move_down(); app.render(); }
+            "k" | "UP" | "C-UP" => { app.move_up(); app.render(); }
+            "h" | "LEFT" | "C-LEFT" | "BACK" => { app.go_up_dir(); app.render(); }
+            "l" | "RIGHT" | "C-RIGHT" => { app.enter(); app.render(); }
+            "x" => { app.open_selected_force(); app.render(); }
+            "PgDOWN" => { app.page_down(); app.render(); }
+            "PgUP" => { app.page_up(); app.render(); }
+            "END" => { app.go_bottom(); app.render(); }
+            "HOME" => { app.go_top(); app.render(); }
+
+            // --- MARKS ---
+            "m" => { app.set_mark(); }
+            "M" => { app.show_marks(); }
+            "'" => { app.jump_to_mark(); app.render(); }
+            "~" => { app.go_home(); app.render(); }
+            ">" => { app.follow_symlink(); app.render(); }
+
+            // --- VIEW ---
+            "a" => { app.toggle_hidden(); app.render(); }
+            "A" => { app.toggle_long_format(); app.render(); }
+            "o" => { app.cycle_sort(); app.render(); }
+            "i" => { app.toggle_sort_invert(); app.render(); }
+            "O" => { app.show_sort_command(); }
+
+            // --- TAGS ---
+            "t" => { app.tag_toggle(); app.render(); }
+            "C-T" => { app.tag_pattern(); app.render(); }
+            "T" => { app.tag_show(); }
+            "u" => { app.tag_clear(); app.render(); }
+
+            // --- UNDO ---
+            "U" => { app.undo(); app.render(); }
+
+            // --- RECENT ---
+            "C-R" => { app.show_recent(); }
+
+            // --- TABS ---
+            "]" => { app.tab_new(); app.render(); }
+            "[" => { app.tab_close(); app.render(); }
+            "J" => { app.tab_prev(); app.render(); }
+            "K" => { app.tab_next(); app.render(); }
+            "}" => { app.tab_duplicate(); app.render(); }
+            "{" => { app.tab_rename(); app.render(); }
+            "1" => { app.tab_switch(1); app.render(); }
+            "2" => { app.tab_switch(2); app.render(); }
+            "3" => { app.tab_switch(3); app.render(); }
+            "4" => { app.tab_switch(4); app.render(); }
+            "5" => { app.tab_switch(5); app.render(); }
+            "6" => { app.tab_switch(6); app.render(); }
+            "7" => { app.tab_switch(7); app.render(); }
+            "8" => { app.tab_switch(8); app.render(); }
+            "9" => { app.tab_switch(9); app.render(); }
+
+            // --- FILE OPERATIONS ---
+            "p" => { app.copy_items(); app.render(); }
+            "P" => { app.move_items(); app.render(); }
+            "c" => { app.rename_item(); app.render(); }
+            "E" => { app.bulk_rename(); app.render(); }
+            "X" => { app.compare_files(); }
+            "s" => { app.link_items(); app.render(); }
+            "d" => { app.delete_items(); app.render(); }
+            "D" => { app.trash_browse(); }
+            "C-D" => { app.toggle_trash(); }
+            "C-P" => { app.chmod(); app.render(); }
+            "C-O" => { app.chown(); app.render(); }
+            "=" => { app.mkdir(); app.render(); }
+
+            // --- SEARCH & FILTER ---
+            "f" => { app.filter_ext_prompt(); app.render(); }
+            "F" => { app.filter_regex_prompt(); app.render(); }
+            "C-F" => { app.filter_clear(); app.render(); }
+            "/" => { app.search_prompt(); app.render(); }
+            "\\" => { app.search_clear(); app.render(); }
+            "n" => { app.search_next(); app.render(); }
+            "N" => { app.search_prev(); app.render(); }
+            "g" => { app.grep_files(); }
+            "L" => { app.locate_files(); }
+            "#" => { app.jump_locate(); app.render(); }
+            "C-L" => { app.fzf_jump(); app.render(); }
+            "C-N" => { app.navi_invoke(); app.render(); }
+
+            // --- ARCHIVES ---
+            "z" => { app.archive_extract(); app.render(); }
+            "Z" => { app.archive_create(); app.render(); }
+
+            // --- GIT / INFO ---
+            "G" => { app.git_status(); }
+            "H" => { app.hash_directory(); }
+            "S" => { app.system_info(); }
+            "e" => { app.file_properties(); }
+
+            // --- AI ---
+            "I" => { app.ai_describe(); }
+            "C-A" => { app.ai_chat(); }
+
+            // --- SSH ---
+            "C-E" => { app.ssh_browse(); app.render(); }
+            // C-; is tricky in terminals, may not be detected
+
+            // --- RIGHT PANE ---
+            "ENTER" => { app.force_render_right(); }
+            "S-DOWN" => { app.right.linedown(); }
+            "S-UP" => { app.right.lineup(); }
+            "S-RIGHT" | "TAB" => { app.right.pagedown(); }
+            "S-LEFT" | "S-TAB" => { app.right.pageup(); }
+
+            // --- CLIPBOARD ---
+            "y" => {
+                let name = app.files.get(app.index).map(|e| e.path.to_string_lossy().to_string()).unwrap_or_default();
+                app.yank_primary();
+                app.msg_info(&format!("Yanked to primary: {}", name));
+            }
+            "Y" => {
+                let name = app.files.get(app.index).map(|e| e.path.to_string_lossy().to_string()).unwrap_or_default();
+                app.yank_clipboard();
+                app.msg_info(&format!("Yanked to clipboard: {}", name));
+            }
+            "C-Y" => { app.yank_right_pane(); }
+
+            // --- COMMAND MODE ---
+            ":" => { app.command_mode(); app.render(); }
+            ";" => { app.command_history(); }
+            "+" => { app.add_interactive(); }
+            "@" => { app.eval_mode(); }
+
+            // --- RESIZE ---
+            "RESIZE" => { app.resize(); app.render(); }
+
+            _ => {}
         }
     }
 
     Crust::cleanup();
-}
-
-impl App {
-    fn load_dir(&mut self) {
-        self.files.clear();
-        let cwd = env::current_dir().unwrap_or_default();
-
-        // Add parent directory entry
-        if cwd.parent().is_some() {
-            self.files.push(DirEntry {
-                name: "..".to_string(),
-                path: cwd.join(".."),
-                is_dir: true,
-                is_symlink: false,
-                is_exec: false,
-                size: 0,
-            });
-        }
-
-        if let Ok(entries) = fs::read_dir(&cwd) {
-            let mut items: Vec<DirEntry> = entries
-                .flatten()
-                .map(|e| {
-                    let meta = e.metadata().ok();
-                    let is_symlink = e.file_type().map(|t| t.is_symlink()).unwrap_or(false);
-                    let is_dir = meta.as_ref().map(|m| m.is_dir()).unwrap_or(false);
-                    let is_exec = meta.as_ref()
-                        .map(|m| m.permissions().mode() & 0o111 != 0 && m.is_file())
-                        .unwrap_or(false);
-                    let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
-                    DirEntry {
-                        name: e.file_name().to_string_lossy().to_string(),
-                        path: e.path(),
-                        is_dir,
-                        is_symlink,
-                        is_exec,
-                        size,
-                    }
-                })
-                .collect();
-
-            // Sort: dirs first, then files, alphabetical
-            items.sort_by(|a, b| {
-                match (a.is_dir, b.is_dir) {
-                    (true, false) => std::cmp::Ordering::Less,
-                    (false, true) => std::cmp::Ordering::Greater,
-                    _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-                }
-            });
-
-            self.files.extend(items);
-        }
-    }
-
-    fn render(&mut self) {
-        // Top bar: current directory
-        let cwd = env::current_dir().unwrap_or_default();
-        let home = dirs_home().unwrap_or_default();
-        let display_path = if cwd.starts_with(&home) {
-            format!("~/{}", cwd.strip_prefix(&home).unwrap().display())
-        } else {
-            cwd.display().to_string()
-        };
-        self.top.say(&format!(" {} | {} items", style::bold(&display_path), self.files.len()));
-
-        // Left pane: file listing
-        let content_h = (self.left.h - if self.left.border { 2 } else { 0 }) as usize;
-        let mut lines = Vec::new();
-
-        for (i, entry) in self.files.iter().enumerate() {
-            let mut name = entry.name.clone();
-            if entry.is_dir && name != ".." {
-                name.push('/');
-            } else if entry.is_symlink {
-                name.push('@');
-            } else if entry.is_exec {
-                name.push('*');
-            }
-
-            let colored = if i == self.index {
-                style::reverse(&style::bold(&name))
-            } else if entry.is_dir {
-                style::fg(&name, 111)
-            } else if entry.is_symlink {
-                style::fg(&name, 248)
-            } else if entry.is_exec {
-                style::fg(&name, 46)
-            } else {
-                name.clone()
-            };
-            lines.push(colored);
-        }
-
-        // Auto-scroll to keep selection visible
-        if self.index >= self.left.ix + content_h {
-            self.left.ix = self.index - content_h + 1;
-        }
-        if self.index < self.left.ix {
-            self.left.ix = self.index;
-        }
-
-        self.left.set_text(&lines.join("\n"));
-        self.left.refresh();
-
-        // Right pane: preview of selected file/dir
-        if let Some(entry) = self.files.get(self.index) {
-            let preview = if entry.is_dir {
-                preview_dir(&entry.path)
-            } else {
-                preview_file(&entry.path, (self.right.h - 2) as usize)
-            };
-            self.right.set_text(&preview);
-            self.right.ix = 0;
-            self.right.refresh();
-        }
-
-        // Status bar
-        let info = if let Some(entry) = self.files.get(self.index) {
-            format!(" {} | {} | {}/{}",
-                entry.name,
-                format_size(entry.size),
-                self.index + 1,
-                self.files.len()
-            )
-        } else {
-            " Empty".to_string()
-        };
-        self.status.say(&info);
-    }
-
-    fn resize(&mut self) {
-        self.top = Pane::new(1, 1, self.cols, 1, 252, 236);
-        self.left = Pane::new(1, 2, self.cols / 2, self.rows - 2, 255, 0);
-        self.left.border = true;
-        self.right = Pane::new(self.cols / 2 + 1, 2, self.cols - self.cols / 2, self.rows - 2, 252, 0);
-        self.right.border = true;
-        self.status = Pane::new(1, self.rows, self.cols, 1, 0, 252);
-        Crust::clear_screen();
-        self.left.border_refresh();
-        self.right.border_refresh();
-    }
-}
-
-fn preview_dir(path: &Path) -> String {
-    let mut lines = Vec::new();
-    if let Ok(entries) = fs::read_dir(path) {
-        let mut items: Vec<String> = entries
-            .flatten()
-            .map(|e| {
-                let name = e.file_name().to_string_lossy().to_string();
-                if e.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                    style::fg(&format!("{}/", name), 111)
-                } else {
-                    name
-                }
-            })
-            .collect();
-        items.sort();
-        for item in items.iter().take(100) {
-            lines.push(item.clone());
-        }
-        if items.len() > 100 {
-            lines.push(style::fg(&format!("... and {} more", items.len() - 100), 245));
-        }
-    }
-    lines.join("\n")
-}
-
-fn preview_file(path: &Path, max_lines: usize) -> String {
-    // Check if text file
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-    let is_text = matches!(ext,
-        "txt" | "md" | "rs" | "rb" | "py" | "js" | "ts" | "sh" | "bash" |
-        "toml" | "yaml" | "yml" | "json" | "xml" | "html" | "css" |
-        "c" | "h" | "cpp" | "go" | "java" | "lua" | "vim" | "conf" |
-        "cfg" | "ini" | "log" | "csv" | "hl" | "gemspec" | "lock" | ""
-    );
-
-    if !is_text {
-        // Binary file: show basic info
-        let meta = fs::metadata(path).ok();
-        return format!(
-            "{}\n\nSize: {}\nType: {}",
-            style::bold(&path.file_name().unwrap_or_default().to_string_lossy()),
-            format_size(meta.as_ref().map(|m| m.len()).unwrap_or(0)),
-            ext
-        );
-    }
-
-    match fs::read_to_string(path) {
-        Ok(content) => {
-            let mut lines: Vec<&str> = content.lines().take(max_lines).collect();
-            if content.lines().count() > max_lines {
-                lines.push("...");
-            }
-            lines.join("\n")
-        }
-        Err(e) => format!("Error: {}", e),
-    }
-}
-
-fn format_size(bytes: u64) -> String {
-    if bytes < 1024 {
-        format!("{}B", bytes)
-    } else if bytes < 1024 * 1024 {
-        format!("{:.1}K", bytes as f64 / 1024.0)
-    } else if bytes < 1024 * 1024 * 1024 {
-        format!("{:.1}M", bytes as f64 / (1024.0 * 1024.0))
-    } else {
-        format!("{:.1}G", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
-    }
-}
-
-fn dirs_home() -> Option<PathBuf> {
-    env::var("HOME").ok().map(PathBuf::from)
 }
