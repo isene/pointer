@@ -100,10 +100,7 @@ impl App {
                                 format!("{}: {}", style::fg("AI", 46), text)
                             }
                         }).collect();
-                        self.right.set_text(&display.join("\n\n"));
-                        self.right.ix = 0;
-                        self.right.refresh();
-                        self.prev_selected = Some(std::path::PathBuf::new());
+                        self.show_in_right(&display.join("\n\n"));
                     }
                 }
                 _ => { self.msg_error("AI request failed"); break; }

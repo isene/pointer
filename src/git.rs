@@ -57,10 +57,7 @@ impl App {
             }
         }
 
-        self.right.set_text(&lines.join("\n"));
-        self.right.ix = 0;
-        self.right.refresh();
-        self.prev_selected = Some(std::path::PathBuf::new());
+        self.show_in_right(&lines.join("\n"));
     }
 
     /// Show system info (RTFM style with visual bars)
@@ -237,10 +234,7 @@ impl App {
                 lines.push(format!("  {} {} {}", style::fg(&format!("{:2}", i + 16), 220), mark, d));
             }
         }
-        self.right.set_text(&lines.join("\n"));
-        self.right.ix = 0;
-        self.right.refresh();
-        self.prev_selected = Some(std::path::PathBuf::new());
+        self.show_in_right(&lines.join("\n"));
     }
 
     /// Hash directory (H key)
@@ -303,11 +297,8 @@ impl App {
                 String::new(),
             ];
             lines.extend(items);
-            self.right.set_text(&lines.join("\n"));
-            self.right.ix = 0;
-            self.right.refresh();
+            self.show_in_right(&lines.join("\n"));
         }
-        self.prev_selected = Some(std::path::PathBuf::new());
     }
 }
 

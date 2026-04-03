@@ -91,10 +91,7 @@ impl App {
                 format!("  {} {}", style::fg(&format!("{:3}", i + 1), 245), cmd)
             }))
             .collect();
-        self.right.set_text(&lines.join("\n"));
-        self.right.ix = 0;
-        self.right.refresh();
-        self.prev_selected = Some(std::path::PathBuf::new());
+        self.show_in_right(&lines.join("\n"));
     }
 
     fn expand_vars(&self, cmd: &str) -> String {
@@ -262,10 +259,7 @@ impl App {
             lines.push(format!("  MIME:        {}", mime));
         }
 
-        self.right.set_text(&lines.join("\n"));
-        self.right.ix = 0;
-        self.right.refresh();
-        self.prev_selected = Some(std::path::PathBuf::new());
+        self.show_in_right(&lines.join("\n"));
     }
 }
 

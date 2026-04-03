@@ -39,10 +39,7 @@ impl App {
         lines.push("Plugins are executable scripts in ~/.pointer/plugins/".into());
         lines.push("Each has a plugin.json manifest with: name, description, key, command".into());
 
-        self.right.set_text(&lines.join("\n"));
-        self.right.ix = 0;
-        self.right.refresh();
-        self.prev_selected = Some(PathBuf::new());
+        self.show_in_right(&lines.join("\n"));
     }
 
     /// Execute a plugin by key

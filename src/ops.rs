@@ -58,10 +58,7 @@ impl App {
         for path in &self.tagged {
             lines.push(format!("  {}", path.display()));
         }
-        self.right.set_text(&lines.join("\n"));
-        self.right.ix = 0;
-        self.right.refresh();
-        self.prev_selected = Some(PathBuf::new());
+        self.show_in_right(&lines.join("\n"));
     }
 
     /// Clear all tags
@@ -250,9 +247,7 @@ impl App {
         if let Some(entry) = self.files.get(self.index) {
             info_lines.push(format!("  \u{2192} {}", entry.name));
         }
-        self.right.set_text(&info_lines.join("\n"));
-        self.right.ix = 0;
-        self.right.refresh();
+        self.show_in_right(&info_lines.join("\n"));
 
         // Show prompt and wait for single keypress (no Enter needed)
         let action = if self.config.trash { "Move to trash" } else { "Delete permanently" };
@@ -478,10 +473,7 @@ impl App {
 
         preview_lines.push(String::new());
         preview_lines.push(format!("{} rename(s). Confirm? (y/n)", renames.len()));
-        self.right.set_text(&preview_lines.join("\n"));
-        self.right.ix = 0;
-        self.right.refresh();
-        self.prev_selected = Some(PathBuf::new());
+        self.show_in_right(&preview_lines.join("\n"));
 
         let Some(key) = crust::Input::getchr(None) else { return };
         if key != "y" && key != "Y" { self.msg_cancel(); return; }

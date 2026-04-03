@@ -131,9 +131,6 @@ impl App {
         for (i, entry) in self.state.ssh_history.iter().enumerate() {
             lines.push(format!("  {} {}", style::fg(&format!("{:2}", i + 1), 220), entry));
         }
-        self.right.set_text(&lines.join("\n"));
-        self.right.ix = 0;
-        self.right.refresh();
-        self.prev_selected = Some(PathBuf::new());
+        self.show_in_right(&lines.join("\n"));
     }
 }
