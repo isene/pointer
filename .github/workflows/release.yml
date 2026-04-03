@@ -30,6 +30,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: pointer
+
+      - name: Checkout crust
+        uses: actions/checkout@v4
+        with:
+          repository: isene/crust
+          path: crust
+
+      - name: Checkout glow
+        uses: actions/checkout@v4
+        with:
+          repository: isene/glow
+          path: glow
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -44,12 +58,14 @@ jobs:
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
 
       - name: Build
+        working-directory: pointer
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Package
+        working-directory: pointer
         run: |
-          cp target/${{ matrix.target }}/release/pointer ${{ matrix.artifact }}
-          chmod +x ${{ matrix.artifact }}
+          cp target/${{ matrix.target }}/release/pointer ../${{ matrix.artifact }}
+          chmod +x ../${{ matrix.artifact }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
