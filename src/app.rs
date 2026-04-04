@@ -174,7 +174,7 @@ impl App {
         }
         // Set window title like RTFM
         let cwd = std::env::current_dir().unwrap_or_default();
-        print!("\x1b]0;pointer: {}\x07", cwd.display());
+        Crust::set_title(&format!("pointer: {}", cwd.display()));
 
         self.render_top();
         self.render_left();
@@ -754,11 +754,7 @@ impl App {
 
     /// Prompt with dark blue background (like RTFM command mode)
     pub fn prompt(&mut self, prompt: &str, default: &str) -> String {
-        let orig_bg = self.status.bg;
-        self.status.bg = 18; // dark blue
-        let result = self.status.ask(prompt, default);
-        self.status.bg = orig_bg;
-        result
+        self.status.ask_with_bg(prompt, default, 18)
     }
 }
 
