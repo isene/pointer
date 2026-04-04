@@ -345,8 +345,11 @@ impl App {
         } else {
             String::new()
         };
-        self.status.say(&format!(" {}{}{}: for command (use @s for selected item, @t for tagged items) - press ? for help",
-            filter_msg, tag_msg, sort_msg));
+        let left = format!(" {}{}{}: for command (use @s for selected item, @t for tagged items) - press ? for help",
+            filter_msg, tag_msg, sort_msg);
+        let version = format!("pointer v{}", env!("CARGO_PKG_VERSION"));
+        let pad = (self.cols as usize).saturating_sub(crust::display_width(&left) + version.len() + 1);
+        self.status.say(&format!("{}{}{}", left, " ".repeat(pad), version));
     }
 
     pub fn resize(&mut self) {
