@@ -297,7 +297,7 @@ impl App {
             let content = preview::preview(&path, max_lines, self.config.bat, self.show_hidden);
             self.right.set_text(&content);
             self.right.ix = 0;
-            self.right.refresh();
+            self.right.full_refresh();
 
             // Show image if applicable
             self.show_image_if_applicable();
