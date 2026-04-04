@@ -111,6 +111,7 @@ pub fn load_dir(
     tagged_paths: &[PathBuf],
 ) -> Vec<DirEntry> {
     let mut entries = Vec::new();
+    let tagged_set: std::collections::HashSet<&PathBuf> = tagged_paths.iter().collect();
 
     let Ok(read_dir) = fs::read_dir(dir) else { return entries };
 
@@ -128,7 +129,7 @@ pub fn load_dir(
             let is_dir = meta.is_dir();
             let is_exec = !is_dir && meta.permissions().mode() & 0o111 != 0;
             let path = e.path();
-            let tagged = tagged_paths.contains(&path);
+            let tagged = tagged_set.contains(&path);
             let mut entry = DirEntry {
                 name,
                 path,

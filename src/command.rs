@@ -264,49 +264,9 @@ impl App {
 }
 
 fn shell_escape(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\\''"))
+    crust::shell_escape(s)
 }
 
-/// Copy text to clipboard using OSC 52 (works in wezterm/kitty/xterm).
-/// Falls back to xclip/xsel/wl-copy via non-blocking spawn.
 fn clipboard_copy(text: &str, selection: &str) {
-    use std::io::Write;
-
-    // Try OSC 52 first (works in modern terminals, no external tool needed)
-    let sel_code = if selection == "primary" { "p" } else { "c" };
-    let encoded = base64_encode(text.as_bytes());
-    print!("\x1b]52;{};{}\x07", sel_code, encoded);
-    std::io::stdout().flush().ok();
-
-    // Also try xclip as backup (non-blocking spawn, don't wait)
-    let sel_arg = if selection == "primary" { "primary" } else { "clipboard" };
-    if let Ok(mut child) = Command::new("xclip")
-        .args(["-selection", sel_arg])
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-    {
-        if let Some(ref mut stdin) = child.stdin {
-            let _ = stdin.write_all(text.as_bytes());
-        }
-        // Don't wait - let it finish in background
-        std::thread::spawn(move || { let _ = child.wait(); });
-    }
-}
-
-fn base64_encode(data: &[u8]) -> String {
-    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = String::new();
-    for chunk in data.chunks(3) {
-        let b0 = chunk[0] as u32;
-        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
-        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
-        let n = (b0 << 16) | (b1 << 8) | b2;
-        result.push(CHARS[(n >> 18 & 63) as usize] as char);
-        result.push(CHARS[(n >> 12 & 63) as usize] as char);
-        if chunk.len() > 1 { result.push(CHARS[(n >> 6 & 63) as usize] as char); } else { result.push('='); }
-        if chunk.len() > 2 { result.push(CHARS[(n & 63) as usize] as char); } else { result.push('='); }
-    }
-    result
+    crust::clipboard_copy(text, selection);
 }

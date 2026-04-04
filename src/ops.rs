@@ -32,6 +32,7 @@ impl App {
         } else {
             self.tagged.push(path);
         }
+        self.tagged_size_cache = None;
         // Update tag flag in files
         if let Some(entry) = self.files.get_mut(self.index) {
             entry.tagged = !entry.tagged;
@@ -64,6 +65,7 @@ impl App {
     /// Clear all tags
     pub fn tag_clear(&mut self) {
         self.tagged.clear();
+        self.tagged_size_cache = None;
         for entry in &mut self.files {
             entry.tagged = false;
         }
@@ -73,6 +75,7 @@ impl App {
     pub fn tag_pattern(&mut self) {
         let pattern = self.prompt("Tag pattern: ", "");
         if pattern.is_empty() { return; }
+        self.tagged_size_cache = None;
         if pattern == "." {
             // Tag all visible files (not dirs, not ..)
             for entry in &mut self.files {

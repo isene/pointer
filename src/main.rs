@@ -47,14 +47,14 @@ fn main() {
         let timeout = if app.file_op_running() { Some(1) } else { Some(2) };
         let key = match Input::getchr(timeout) {
             Some(k) => k,
-            None => { app.render(); continue; } // Idle timeout: re-render and wait again
+            None => { app.reload_and_render(); continue; } // Idle timeout: reload dir and re-render
         };
 
         match key.as_str() {
             // --- BASIC ---
             "?" => { app.show_help(); }
             "v" => { app.show_version(); }
-            "r" => { app.refresh(); app.render(); }
+            "r" => { app.refresh(); app.reload_and_render(); }
             "R" => { app.reload_config(); app.render(); }
             "C" => { app.show_config(); }
             "W" => { app.write_config(); }
@@ -82,8 +82,8 @@ fn main() {
             // --- MOTION ---
             "j" | "DOWN" | "C-DOWN" => { app.move_down(); app.render(); }
             "k" | "UP" | "C-UP" => { app.move_up(); app.render(); }
-            "h" | "LEFT" | "C-LEFT" | "BACK" => { app.go_up_dir(); app.render(); }
-            "l" | "RIGHT" | "C-RIGHT" => { app.enter(); app.render(); }
+            "h" | "LEFT" | "C-LEFT" | "BACK" => { app.go_up_dir(); app.reload_and_render(); }
+            "l" | "RIGHT" | "C-RIGHT" => { app.enter(); app.reload_and_render(); }
             "x" => { app.open_selected_force(); app.render(); }
             "PgDOWN" => { app.page_down(); app.render(); }
             "PgUP" => { app.page_up(); app.render(); }
@@ -93,15 +93,15 @@ fn main() {
             // --- MARKS ---
             "m" => { app.set_mark(); }
             "M" => { app.show_marks(); }
-            "'" => { app.jump_to_mark(); app.render(); }
-            "~" => { app.go_home(); app.render(); }
-            ">" => { app.follow_symlink(); app.render(); }
+            "'" => { app.jump_to_mark(); app.reload_and_render(); }
+            "~" => { app.go_home(); app.reload_and_render(); }
+            ">" => { app.follow_symlink(); app.reload_and_render(); }
 
             // --- VIEW ---
-            "a" => { app.toggle_hidden(); app.render(); }
+            "a" => { app.toggle_hidden(); app.reload_and_render(); }
             "A" => { app.toggle_long_format(); app.render(); }
-            "o" => { app.cycle_sort(); app.render(); }
-            "i" => { app.toggle_sort_invert(); app.render(); }
+            "o" => { app.cycle_sort(); app.reload_and_render(); }
+            "i" => { app.toggle_sort_invert(); app.reload_and_render(); }
             "O" => { app.show_sort_command(); }
 
             // --- TAGS ---
@@ -111,7 +111,7 @@ fn main() {
             "u" => { app.tag_clear(); app.render(); }
 
             // --- UNDO ---
-            "U" => { app.undo(); app.render(); }
+            "U" => { app.undo(); app.reload_and_render(); }
 
             // --- RECENT ---
             "C-R" => { app.show_recent(); }
@@ -134,36 +134,36 @@ fn main() {
             "9" => { app.tab_switch(9); app.render(); }
 
             // --- FILE OPERATIONS ---
-            "p" => { app.copy_items(); app.render(); }
-            "P" => { app.move_items(); app.render(); }
-            "c" => { app.rename_item(); app.render(); }
-            "E" => { app.bulk_rename(); app.render(); }
+            "p" => { app.copy_items(); app.reload_and_render(); }
+            "P" => { app.move_items(); app.reload_and_render(); }
+            "c" => { app.rename_item(); app.reload_and_render(); }
+            "E" => { app.bulk_rename(); app.reload_and_render(); }
             "X" => { app.compare_files(); }
-            "s" => { app.link_items(); app.render(); }
-            "d" => { app.delete_items(); app.render(); }
+            "s" => { app.link_items(); app.reload_and_render(); }
+            "d" => { app.delete_items(); app.reload_and_render(); }
             "D" => { app.trash_browse(); }
             "C-D" => { app.toggle_trash(); }
-            "C-P" => { app.chmod(); app.render(); }
-            "C-O" => { app.chown(); app.render(); }
-            "=" => { app.mkdir(); app.render(); }
+            "C-P" => { app.chmod(); app.reload_and_render(); }
+            "C-O" => { app.chown(); app.reload_and_render(); }
+            "=" => { app.mkdir(); app.reload_and_render(); }
 
             // --- SEARCH & FILTER ---
-            "f" => { app.filter_ext_prompt(); app.render(); }
-            "F" => { app.filter_regex_prompt(); app.render(); }
-            "C-F" => { app.filter_clear(); app.render(); }
+            "f" => { app.filter_ext_prompt(); app.reload_and_render(); }
+            "F" => { app.filter_regex_prompt(); app.reload_and_render(); }
+            "C-F" => { app.filter_clear(); app.reload_and_render(); }
             "/" => { app.search_prompt(); app.render(); }
             "\\" => { app.search_clear(); app.render(); }
             "n" => { app.search_next(); app.render(); }
             "N" => { app.search_prev(); app.render(); }
             "g" => { app.grep_files(); }
             "L" => { app.locate_files(); }
-            "#" => { app.jump_locate(); app.render(); }
-            "C-L" => { app.fzf_jump(); app.render(); }
+            "#" => { app.jump_locate(); app.reload_and_render(); }
+            "C-L" => { app.fzf_jump(); app.reload_and_render(); }
             "C-N" => { app.navi_invoke(); app.render(); }
 
             // --- ARCHIVES ---
-            "z" => { app.archive_extract(); app.render(); }
-            "Z" => { app.archive_create(); app.render(); }
+            "z" => { app.archive_extract(); app.reload_and_render(); }
+            "Z" => { app.archive_create(); app.reload_and_render(); }
 
             // --- GIT / INFO ---
             "G" => { app.git_status(); }
@@ -176,7 +176,7 @@ fn main() {
             "C-A" => { app.ai_chat(); }
 
             // --- SSH ---
-            "C-E" => { app.ssh_browse(); app.render(); }
+            "C-E" => { app.ssh_browse(); app.reload_and_render(); }
             // C-; is tricky in terminals, may not be detected
 
             // --- RIGHT PANE ---
@@ -200,7 +200,7 @@ fn main() {
             "C-Y" => { app.yank_right_pane(); }
 
             // --- COMMAND MODE ---
-            ":" => { app.command_mode(); app.render(); }
+            ":" => { app.command_mode(); app.reload_and_render(); }
             ";" => { app.command_history(); }
             "+" => { app.add_interactive(); }
             "@" => { app.eval_mode(); }

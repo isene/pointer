@@ -11,6 +11,7 @@ fn pointer_dir() -> PathBuf {
 fn config_path() -> PathBuf { pointer_dir().join("conf.json") }
 fn state_path() -> PathBuf { pointer_dir().join("state.json") }
 pub fn trash_dir() -> PathBuf { pointer_dir().join("trash") }
+pub fn lastdir_path() -> PathBuf { pointer_dir().join("lastdir") }
 
 pub fn ensure_dirs() {
     let dir = pointer_dir();

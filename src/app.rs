@@ -33,6 +33,7 @@ pub struct App {
     pub index: usize,
     pub scroll_ix: usize,
     pub tagged: Vec<PathBuf>,
+    pub tagged_size_cache: Option<u64>,
     pub ls_colors: HashMap<String, String>,
     pub sort_mode: SortMode,
     pub sort_invert: bool,
@@ -43,6 +44,7 @@ pub struct App {
     pub filter_regex: String,
     pub undo_stack: Vec<UndoOp>,
     pub prev_selected: Option<PathBuf>,
+    pub top_extra_cache: Option<(PathBuf, String)>,
     pub tabs: Vec<Tab>,
     pub current_tab: usize,
     pub image_display: Option<glow::Display>,
@@ -79,6 +81,7 @@ impl App {
             index: 0,
             scroll_ix: 0,
             tagged: Vec::new(),
+            tagged_size_cache: None,
             ls_colors,
             sort_mode,
             sort_invert,
@@ -89,6 +92,7 @@ impl App {
             filter_regex: String::new(),
             undo_stack: Vec::new(),
             prev_selected: None,
+            top_extra_cache: None,
             tabs: Vec::new(),
             current_tab: 0,
             image_display: Some(glow::Display::new()),
@@ -162,16 +166,19 @@ impl App {
         }
     }
 
-    pub fn render(&mut self) {
-        // Reload directory every render to catch external filesystem changes
+    /// Reload directory listing, preserving selection by name
+    pub fn reload_and_render(&mut self) {
         let prev_name = self.files.get(self.index).map(|e| e.name.clone());
         self.load_dir();
-        // Try to keep selection on the same file
         if let Some(name) = prev_name {
             if let Some(pos) = self.files.iter().position(|e| e.name == name) {
                 self.index = pos;
             }
         }
+        self.render();
+    }
+
+    pub fn render(&mut self) {
         // Set window title like RTFM
         let cwd = std::env::current_dir().unwrap_or_default();
         Crust::set_title(&format!("pointer: {}", cwd.display()));
@@ -214,19 +221,18 @@ impl App {
             let size = format_size(entry.size);
             let date = format_time(entry.modified);
 
-            let extra = if entry.is_dir {
-                let n = std::fs::read_dir(&entry.path).map(|d| d.count()).unwrap_or(0);
-                format!(" [{} items]", n)
-            } else {
-                // Image info (dimensions, color)
-                let ext = entry.path.extension().and_then(|e| e.to_str()).unwrap_or("");
-                if preview::is_image_ext(ext) {
-                    get_image_info(&entry.path)
-                } else if ext.eq_ignore_ascii_case("pdf") {
-                    get_pdf_info(&entry.path)
+            let extra = if let Some((ref cached_path, ref cached_extra)) = self.top_extra_cache {
+                if *cached_path == entry.path {
+                    cached_extra.clone()
                 } else {
-                    String::new()
+                    let e = compute_top_extra(entry);
+                    self.top_extra_cache = Some((entry.path.clone(), e.clone()));
+                    e
                 }
+            } else {
+                let e = compute_top_extra(entry);
+                self.top_extra_cache = Some((entry.path.clone(), e.clone()));
+                e
             };
 
             format!(" {}@{}: {} ({} {}  {}  {}){}", user, host, path, owner, perms, size, date, extra)
@@ -250,8 +256,10 @@ impl App {
                 format_short_entry(entry)
             };
 
-            // RTFM style: → prefix + underline for selected, reverse for tagged
-            let line = if i == self.index {
+            // RTFM style: → prefix + underline for selected, reverse for tagged, both if selected+tagged
+            let line = if i == self.index && entry.tagged {
+                format!("\u{2192} {}", style::reverse(&style::underline(&name_part)))
+            } else if i == self.index {
                 format!("\u{2192} {}", style::underline(&name_part))
             } else if entry.tagged {
                 format!("  {}", style::reverse(&name_part))
@@ -331,10 +339,12 @@ impl App {
             String::new()
         };
         let tag_msg = if !self.tagged.is_empty() {
-            let total_size: u64 = self.tagged.iter()
-                .filter_map(|p| std::fs::metadata(p).ok())
-                .map(|m| m.len())
-                .sum();
+            let total_size = *self.tagged_size_cache.get_or_insert_with(|| {
+                self.tagged.iter()
+                    .filter_map(|p| std::fs::metadata(p).ok())
+                    .map(|m| m.len())
+                    .sum()
+            });
             format!("[{} tagged: {}] ", self.tagged.len(), format_size(total_size))
         } else {
             String::new()
@@ -594,6 +604,12 @@ impl App {
     pub fn save_dir_index(&mut self) {
         let cwd = env::current_dir().unwrap_or_default();
         self.state.dir_index.insert(cwd.to_string_lossy().to_string(), self.index);
+        // Cap at 200 entries to prevent unbounded state file growth
+        if self.state.dir_index.len() > 200 {
+            // Remove arbitrary excess entries (HashMap has no ordering, just trim)
+            let keys: Vec<String> = self.state.dir_index.keys().take(self.state.dir_index.len() - 200).cloned().collect();
+            for k in keys { self.state.dir_index.remove(&k); }
+        }
     }
 
     pub fn save_and_quit(&mut self) {
@@ -604,6 +620,10 @@ impl App {
         self.config.sort_invert = self.sort_invert;
         self.config.save();
         self.state.save();
+        // Write exit directory so the parent shell can cd to it
+        if let Ok(cwd) = env::current_dir() {
+            let _ = std::fs::write(crate::config::lastdir_path(), cwd.to_string_lossy().as_bytes());
+        }
     }
 
     pub fn refresh(&mut self) {
@@ -757,7 +777,10 @@ impl App {
 
     /// Prompt with dark blue background (like RTFM command mode)
     pub fn prompt(&mut self, prompt: &str, default: &str) -> String {
-        self.status.ask_with_bg(prompt, default, 18)
+        let result = self.status.ask_with_bg(prompt, default, 18);
+        // Restore status bar after prompt (clears lingering prompt text)
+        self.render_status();
+        result
     }
 }
 
@@ -848,6 +871,23 @@ pub fn gid_to_name(gid: u32) -> String {
         user
     } else {
         gid.to_string()
+    }
+}
+
+/// Compute extra info for top bar (dir item count, image dims, pdf pages)
+fn compute_top_extra(entry: &crate::entry::DirEntry) -> String {
+    if entry.is_dir {
+        let n = std::fs::read_dir(&entry.path).map(|d| d.count()).unwrap_or(0);
+        format!(" [{} items]", n)
+    } else {
+        let ext = entry.path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if crate::preview::is_image_ext(ext) {
+            get_image_info(&entry.path)
+        } else if ext.eq_ignore_ascii_case("pdf") {
+            get_pdf_info(&entry.path)
+        } else {
+            String::new()
+        }
     }
 }
 
