@@ -302,6 +302,9 @@ impl App {
         }
         self.prev_selected = None;
         self.load_dir();
+        // Force right pane clear + re-render to prevent artifacts from delete dialog
+        self.right.clear();
+        self.force_render_right();
     }
 
     /// Rename current item
