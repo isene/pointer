@@ -55,15 +55,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crust"
-version = "0.1.0"
-dependencies = [
- "crossterm",
- "libc",
- "unicode-width",
-]
-
-[[package]]
 name = "errno"
 version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -74,7 +65,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "glow"
+name = "fe2o3-crust"
+version = "0.1.0"
+dependencies = [
+ "crossterm",
+ "libc",
+ "unicode-width",
+]
+
+[[package]]
+name = "fe2o3-glow"
 version = "0.1.0"
 dependencies = [
  "base64",
@@ -157,10 +157,10 @@ dependencies = [
 
 [[package]]
 name = "pointer"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
- "crust",
- "glow",
+ "fe2o3-crust",
+ "fe2o3-glow",
  "libc",
  "regex",
  "serde",
