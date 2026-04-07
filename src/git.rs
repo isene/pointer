@@ -1,5 +1,5 @@
 use crate::app::App;
-use crust::style;
+use crust::{style, Input};
 use std::process::Command;
 
 impl App {
@@ -217,24 +217,105 @@ impl App {
             "=".repeat(50),
             String::new(),
         ];
-        if !self.state.recent_files.is_empty() {
-            lines.push(style::fg("Recent files:", 46));
-            for (i, f) in self.state.recent_files.iter().take(15).enumerate() {
-                lines.push(format!("  {} {}", style::fg(&format!("{:2}", i + 1), 220), f));
+        let files: Vec<String> = self.state.recent_files.iter().take(9).cloned().collect();
+        let dirs: Vec<String> = self.state.recent_dirs.iter().take(9).cloned().collect();
+
+        if !files.is_empty() {
+            lines.push(style::fg("Files:", 226));
+            for (i, f) in files.iter().enumerate() {
+                let name = std::path::Path::new(f).file_name()
+                    .map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                let dir = std::path::Path::new(f).parent()
+                    .map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+                lines.push(format!("  {} {} {}",
+                    style::fg(&format!("{}", i + 1), 220),
+                    style::fg(&name, 156),
+                    style::fg(&dir, 240)));
             }
-        } else {
-            lines.push(style::fg("No recent files", 245));
+            lines.push(String::new());
         }
-        lines.push(String::new());
-        if !self.state.recent_dirs.is_empty() {
-            lines.push(style::fg("Recent directories:", 46));
-            for (i, d) in self.state.recent_dirs.iter().take(10).enumerate() {
+        if !dirs.is_empty() {
+            lines.push(style::fg("Directories:", 226));
+            for (i, d) in dirs.iter().enumerate() {
                 let exists = std::path::Path::new(d).is_dir();
                 let mark = if exists { "\u{2713}" } else { "\u{2717}" };
-                lines.push(format!("  {} {} {}", style::fg(&format!("{:2}", i + 16), 220), mark, d));
+                let name = std::path::Path::new(d).file_name()
+                    .map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                let parent = std::path::Path::new(d).parent()
+                    .map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+                lines.push(format!("  {} {} {} {}",
+                    style::fg(&format!("{}", i + 1), 220), mark,
+                    style::fg(&name, 156),
+                    style::fg(&parent, 240)));
             }
         }
+        if files.is_empty() && dirs.is_empty() {
+            lines.push(style::fg("No recent files or directories", 245));
+        } else {
+            lines.push(String::new());
+            lines.push(style::fg("f/d to toggle, number to jump, other key to close", 240));
+        }
         self.show_in_right(&lines.join("\n"));
+
+        // Wait for input: number to jump, f/d to toggle, anything else to close
+        let mut showing_dirs = false;
+        loop {
+            let Some(key) = Input::getchr(None) else { break };
+            match key.as_str() {
+                "ESC" | "C-R" => break,
+                "f" => {
+                    showing_dirs = false;
+                    // Re-render with files highlighted
+                    self.show_in_right(&lines.join("\n"));
+                    continue;
+                }
+                "d" => {
+                    showing_dirs = true;
+                    self.show_in_right(&lines.join("\n"));
+                    continue;
+                }
+                k if k.len() == 1 && k.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) => {
+                    let n: usize = k.parse().unwrap_or(0);
+                    if n == 0 { break; }
+                    let idx = n - 1;
+                    if showing_dirs {
+                        if let Some(d) = dirs.get(idx) {
+                            let target = std::path::PathBuf::from(d);
+                            if target.is_dir() {
+                                self.save_dir_index();
+                                self.rotate_mark_history();
+                                let _ = std::env::set_current_dir(&target);
+                                self.index = 0;
+                                self.scroll_ix = 0;
+                                self.prev_selected = None;
+                                self.load_dir();
+                            }
+                        }
+                    } else if let Some(f) = files.get(idx) {
+                        let target = std::path::PathBuf::from(f);
+                        if let Some(parent) = target.parent() {
+                            if parent.is_dir() {
+                                self.save_dir_index();
+                                self.rotate_mark_history();
+                                let _ = std::env::set_current_dir(parent);
+                                self.index = 0;
+                                self.scroll_ix = 0;
+                                self.prev_selected = None;
+                                self.load_dir();
+                                let name = target.file_name().map(|n| n.to_string_lossy().to_string());
+                                if let Some(name) = name {
+                                    if let Some(pos) = self.files.iter().position(|e| e.name == name) {
+                                        self.index = pos;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+                _ => break,
+            }
+        }
     }
 
     /// Hash directory (H key)

@@ -63,7 +63,7 @@ impl App {
     }
 
     /// Rotate automatic mark history (marks 1-5, ' = last dir)
-    fn rotate_mark_history(&mut self) {
+    pub fn rotate_mark_history(&mut self) {
         let cwd = env::current_dir().unwrap_or_default().to_string_lossy().to_string();
         // Shift 4->5, 3->4, 2->3, 1->2
         for i in (1..5).rev() {
