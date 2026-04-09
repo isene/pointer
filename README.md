@@ -163,18 +163,31 @@ Scripts can control pointer via stderr directives: `cd:/path`, `select:filename`
 
 ### Plugin System
 
-Plugins are JSON manifests in `~/.pointer/plugins/`:
+Plugins live in `~/.pointer/plugins/`. Each plugin is a JSON manifest (`.json` file) describing an external command bound to a key.
+
+**Manifest format:**
 
 ```json
 {
-  "name": "My Plugin",
-  "description": "Does something useful",
-  "key": "F5",
-  "command": "my-script.sh"
+  "name": "Git",
+  "description": "Interactive git client",
+  "key": "C-G",
+  "command": "bash ~/.pointer/plugins/git.sh",
+  "interactive": true
 }
 ```
 
-Commands receive `POINTER_CONTEXT` env var with JSON state.
+| Field | Description |
+|-------|-------------|
+| `name` | Display name shown in help |
+| `description` | Short description |
+| `key` | Trigger key (e.g. `F5`, `C-G` for Ctrl-G) |
+| `command` | Shell command to execute |
+| `interactive` | If `true`, runs in raw terminal (full TUI). Default: `false` |
+
+**Non-interactive** plugins run in the background; their stdout appears in the right pane. **Interactive** plugins take over the terminal (like vim or lazygit) and pointer restores its screen on exit.
+
+Commands receive `POINTER_CONTEXT` env var with JSON state. Unmatched keys fall through to plugin dispatch, so plugins can bind any free key.
 
 ## Part of the Rust Terminal Suite (Fe2O3)
 
