@@ -9,6 +9,7 @@ pub struct Plugin {
     pub description: String,
     pub key: String,
     pub command: String,
+    pub interactive: bool,
     pub enabled: bool,
     pub path: PathBuf,
 }
@@ -56,16 +57,33 @@ impl App {
                 "tagged": tagged,
             });
 
-            let output = std::process::Command::new("sh")
-                .arg("-c")
-                .arg(&plugin.command)
-                .env("POINTER_CONTEXT", context.to_string())
-                .output();
+            if plugin.interactive {
+                // Interactive: give the script the full terminal
+                crust::Crust::cleanup();
+                let _ = std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(&plugin.command)
+                    .env("POINTER_CONTEXT", context.to_string())
+                    .env("POINTER_SELECTED", &selected)
+                    .env("POINTER_DIR", &cwd)
+                    .status();
+                crust::Crust::init();
+                crust::Crust::clear_screen();
+                self.resize();
+            } else {
+                let output = std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(&plugin.command)
+                    .env("POINTER_CONTEXT", context.to_string())
+                    .env("POINTER_SELECTED", &selected)
+                    .env("POINTER_DIR", &cwd)
+                    .output();
 
-            if let Ok(o) = output {
-                let result = String::from_utf8_lossy(&o.stdout).to_string();
-                if !result.is_empty() {
-                    self.show_in_right(&result);
+                if let Ok(o) = output {
+                    let result = String::from_utf8_lossy(&o.stdout).to_string();
+                    if !result.is_empty() {
+                        self.show_in_right(&result);
+                    }
                 }
             }
             return true;
@@ -89,6 +107,7 @@ fn scan_plugins() -> Vec<Plugin> {
                         description: json["description"].as_str().unwrap_or("").to_string(),
                         key: json["key"].as_str().unwrap_or("").to_string(),
                         command: json["command"].as_str().unwrap_or("").to_string(),
+                        interactive: json["interactive"].as_bool().unwrap_or(false),
                         enabled: !path.to_string_lossy().ends_with(".off.json"),
                         path,
                     });

@@ -227,12 +227,13 @@ fn bat_preview(path: &Path, max_lines: usize) -> Option<String> {
     let bat = find_bat()?;
     let output = Command::new(&bat)
         .args(["--color=always", "--style=plain", "--paging=never",
-               "--line-range", &format!("1:{}", max_lines)])
+               "--tabs=8", "--line-range", &format!("1:{}", max_lines)])
         .arg(path)
         .output()
         .ok()?;
     if output.status.success() {
-        Some(String::from_utf8_lossy(&output.stdout).to_string())
+        let s = String::from_utf8_lossy(&output.stdout).replace('\r', "");
+        Some(s)
     } else {
         None
     }

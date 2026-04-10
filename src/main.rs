@@ -208,7 +208,7 @@ fn main() {
             // --- RESIZE ---
             "RESIZE" => { app.resize(); app.render(); }
 
-            _ => {}
+            other => { if app.run_plugin(other) { app.reload_and_render(); } }
         }
     }
 
