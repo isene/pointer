@@ -54,6 +54,9 @@ pub struct App {
     pub pick_output: Option<String>,
     pub locate_active: bool,
     pub ssh_state: Option<crate::ssh::SshState>,
+    pub preview_cache: crate::preview::PreviewCache,
+    pub dir_mtime: Option<std::time::SystemTime>,
+    pub preload_busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl App {
@@ -108,6 +111,9 @@ impl App {
             pick_output: None,
             locate_active: false,
             ssh_state: None,
+            preview_cache: crate::preview::new_cache(),
+            dir_mtime: None,
+            preload_busy: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };
 
         app.rebuild_panes();
@@ -124,6 +130,7 @@ impl App {
     }
 
     pub fn load_dir(&mut self) {
+        preview::clear_cache(&self.preview_cache);
         let cwd = env::current_dir().unwrap_or_default();
         self.files = entry::load_dir(
             &cwd,
@@ -164,6 +171,18 @@ impl App {
         } else if self.index >= self.files.len() {
             self.index = self.files.len() - 1;
         }
+
+        // Track dir mtime for idle skip
+        self.dir_mtime = std::fs::metadata(&cwd).ok()
+            .and_then(|m| m.modified().ok());
+    }
+
+    /// Check if directory has changed since last load
+    pub fn dir_changed(&self) -> bool {
+        let cwd = env::current_dir().unwrap_or_default();
+        let current_mtime = std::fs::metadata(&cwd).ok()
+            .and_then(|m| m.modified().ok());
+        current_mtime != self.dir_mtime
     }
 
     /// Reload directory listing, preserving selection by name
@@ -302,14 +321,42 @@ impl App {
 
         if let Some(path) = selected_path {
             let max_lines = visible_height(&self.right);
-            let content = preview::preview(&path, max_lines, self.config.bat, self.show_hidden);
+            let content = preview::preview_cached(&path, max_lines, self.config.bat, self.show_hidden, &self.preview_cache);
             self.right.set_text(&content);
             self.right.ix = 0;
             self.right.full_refresh();
 
             // Show image if applicable
             self.show_image_if_applicable();
+
+            // Pre-load adjacent previews in background
+            self.preload_adjacent_previews(max_lines);
         }
+    }
+
+    fn preload_adjacent_previews(&self, max_lines: usize) {
+        use std::sync::atomic::Ordering;
+        if self.preload_busy.load(Ordering::Relaxed) { return; }
+        let mut paths = Vec::new();
+        for offset in [1, 2, -1i32] {
+            let idx = self.index as i32 + offset;
+            if idx >= 0 && (idx as usize) < self.files.len() {
+                let entry = &self.files[idx as usize];
+                if !entry.is_dir {
+                    paths.push(entry.path.clone());
+                }
+            }
+        }
+        if paths.is_empty() { return; }
+        let cache = self.preview_cache.clone();
+        let use_bat = self.config.bat;
+        let show_hidden = self.show_hidden;
+        let busy = self.preload_busy.clone();
+        busy.store(true, Ordering::Relaxed);
+        std::thread::spawn(move || {
+            preview::preload_adjacent(&paths, max_lines, use_bat, show_hidden, &cache);
+            busy.store(false, Ordering::Relaxed);
+        });
     }
 
     pub fn force_render_right(&mut self) {
@@ -586,6 +633,12 @@ impl App {
     pub fn toggle_bat(&mut self) {
         self.config.bat = !self.config.bat;
         self.prev_selected = None;
+        preview::clear_cache(&self.preview_cache);
+        if self.config.bat {
+            self.msg_info("Syntax: bat (external)");
+        } else {
+            self.msg_info("Syntax: internal");
+        }
     }
 
     pub fn change_width(&mut self) {

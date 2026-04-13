@@ -6,6 +6,7 @@ mod config;
 mod entry;
 mod git;
 mod help;
+mod highlight;
 mod image;
 mod marks;
 mod ops;
@@ -47,7 +48,11 @@ fn main() {
         let timeout = if app.file_op_running() { Some(1) } else { Some(2) };
         let key = match Input::getchr(timeout) {
             Some(k) => k,
-            None => { app.reload_and_render(); continue; } // Idle timeout: reload dir and re-render
+            None => {
+                // Only reload if directory actually changed (avoids unnecessary work)
+                if app.dir_changed() { app.reload_and_render(); }
+                continue;
+            }
         };
 
         match key.as_str() {

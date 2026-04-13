@@ -1,9 +1,60 @@
+use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Arc, Mutex};
 use crust::style;
 
 use crate::entry::format_size;
+use crate::highlight;
+
+const LARGE_FILE_HIGHLIGHT_LIMIT: u64 = 1_000_000;  // 1MB: skip highlighting
+const LARGE_FILE_PREVIEW_LIMIT: u64 = 10_000_000;   // 10MB: show size only
+
+/// Thread-safe preview cache: path -> (content, max_lines used)
+pub type PreviewCache = Arc<Mutex<HashMap<PathBuf, (String, usize)>>>;
+
+pub fn new_cache() -> PreviewCache {
+    Arc::new(Mutex::new(HashMap::with_capacity(8)))
+}
+
+pub fn clear_cache(cache: &PreviewCache) {
+    if let Ok(mut c) = cache.lock() { c.clear(); }
+}
+
+/// Pre-generate previews for adjacent files (call from background)
+pub fn preload_adjacent(paths: &[PathBuf], max_lines: usize, use_bat: bool, show_hidden: bool, cache: &PreviewCache) {
+    for path in paths {
+        let key = path.clone();
+        // Skip if already cached
+        if let Ok(c) = cache.lock() {
+            if c.contains_key(&key) { continue; }
+        }
+        let content = preview(path, max_lines, use_bat, show_hidden);
+        if let Ok(mut c) = cache.lock() {
+            c.insert(key, (content, max_lines));
+        }
+    }
+}
+
+/// Get preview from cache, or generate and cache it
+pub fn preview_cached(path: &Path, max_lines: usize, use_bat: bool, show_hidden: bool, cache: &PreviewCache) -> String {
+    let key = path.to_path_buf();
+    if let Ok(c) = cache.lock() {
+        if let Some((content, cached_lines)) = c.get(&key) {
+            if *cached_lines >= max_lines {
+                return content.clone();
+            }
+        }
+    }
+    let content = preview(path, max_lines, use_bat, show_hidden);
+    if let Ok(mut c) = cache.lock() {
+        // Keep cache small
+        if c.len() > 16 { c.clear(); }
+        c.insert(key, (content.clone(), max_lines));
+    }
+    content
+}
 
 /// Generate preview content for right pane
 pub fn preview(path: &Path, max_lines: usize, use_bat: bool, show_hidden: bool) -> String {
@@ -45,6 +96,27 @@ fn preview_file(path: &Path, max_lines: usize, use_bat: bool) -> String {
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
     let ext_lower = ext.to_lowercase();
 
+    // HyperList: use dedicated highlighter
+    if ext_lower == "hl" {
+        if let Ok(meta) = fs::metadata(path) {
+            if meta.len() > LARGE_FILE_PREVIEW_LIMIT {
+                return format!("{}\n\n{}\nSize: {}",
+                    style::bold(&path.file_name().unwrap_or_default().to_string_lossy()),
+                    style::fg("[File too large for preview]", 245),
+                    format_size(meta.len()));
+            }
+        }
+        if use_bat {
+            if let Some(highlighted) = bat_preview(path, max_lines) {
+                return highlighted;
+            }
+        }
+        if let Ok(bytes) = fs::read(path) {
+            let content = String::from_utf8_lossy(&bytes).replace('\t', "   ");
+            return highlight::highlight_hyperlist(&content, max_lines);
+        }
+    }
+
     // Markdown via pandoc
     if ext_lower == "md" {
         if let Some(s) = run_preview_cmd("pandoc", &[path.as_os_str().to_str().unwrap_or(""), "-t", "plain"]) {
@@ -52,10 +124,29 @@ fn preview_file(path: &Path, max_lines: usize, use_bat: bool) -> String {
         }
     }
 
-    // Try bat for syntax highlighting (text files)
-    if use_bat && is_text_ext(ext) {
-        if let Some(highlighted) = bat_preview(path, max_lines) {
-            return highlighted;
+    // Text files: internal highlighter (fast) or bat (toggled with 'b')
+    if is_text_ext(ext) || ext.is_empty() {
+        // Large file guard
+        if let Ok(meta) = fs::metadata(path) {
+            let size = meta.len();
+            if size > LARGE_FILE_PREVIEW_LIMIT {
+                return format!("{}\n\n{}\nSize: {}",
+                    style::bold(&path.file_name().unwrap_or_default().to_string_lossy()),
+                    style::fg("[File too large for preview]", 245),
+                    format_size(size));
+            }
+            if use_bat {
+                // 'b' toggled: use external bat
+                if let Some(highlighted) = bat_preview(path, max_lines) {
+                    return highlighted;
+                }
+            }
+            // Internal highlighter (default, zero-spawn)
+            if size <= LARGE_FILE_HIGHLIGHT_LIMIT {
+                return highlighted_preview(path, ext, max_lines);
+            }
+            // >1MB: plain text, no highlighting
+            return text_preview(path, max_lines);
         }
     }
 
@@ -166,15 +257,10 @@ fn preview_file(path: &Path, max_lines: usize, use_bat: bool) -> String {
         );
     }
 
-    // Text file preview
-    if is_text_ext(ext) || ext.is_empty() {
-        return text_preview(path, max_lines);
-    }
-
     // Try MIME-based detection as last resort
     let mime = mime_type(path);
     if mime.starts_with("text/") {
-        return text_preview(path, max_lines);
+        return highlighted_preview(path, ext, max_lines);
     }
 
     // Binary / unknown: basic info
@@ -207,7 +293,67 @@ fn shell_preview(cmd: &str) -> Option<String> {
     }
 }
 
+/// Detect language from shebang line (e.g. #!/usr/bin/env ruby -> "rb")
+fn detect_shebang(first_line: &str) -> Option<&'static str> {
+    let line = first_line.trim();
+    if !line.starts_with("#!") { return None; }
+    let cmd = line.rsplit('/').next().unwrap_or("");
+    // Strip "env " prefix
+    let cmd = cmd.strip_prefix("env ").unwrap_or(cmd);
+    // Strip version suffixes (python3 -> python, ruby3.2 -> ruby)
+    let base = cmd.split(|c: char| c.is_ascii_digit() || c == '.').next().unwrap_or(cmd);
+    match base {
+        "ruby" => Some("rb"),
+        "python" => Some("py"),
+        "perl" => Some("pl"),
+        "node" | "nodejs" | "deno" | "bun" => Some("js"),
+        "bash" | "sh" | "zsh" | "fish" | "dash" => Some("sh"),
+        "lua" => Some("lua"),
+        "php" => Some("py"),  // close enough highlighting
+        _ => None,
+    }
+}
+
+fn highlighted_preview(path: &Path, ext: &str, max_lines: usize) -> String {
+    match fs::read(path) {
+        Ok(bytes) => {
+            if bytes.iter().take(512).any(|&b| b == 0) {
+                let meta = fs::metadata(path).ok();
+                return format!("{}\n\n{}\nSize: {}",
+                    style::bold(&path.file_name().unwrap_or_default().to_string_lossy()),
+                    style::fg("[Binary file]", 245),
+                    format_size(meta.as_ref().map(|m| m.len()).unwrap_or(0)));
+            }
+            let content = String::from_utf8_lossy(&bytes);
+            // Use extension, or detect from shebang
+            let lang = if ext.is_empty() || highlight::lang_known(&ext.to_lowercase()).is_none() {
+                content.lines().next()
+                    .and_then(detect_shebang)
+                    .unwrap_or(ext)
+            } else {
+                ext
+            };
+            highlight::highlight(&content, &lang.to_lowercase(), max_lines)
+        }
+        Err(e) => format!("Error: {}", e),
+    }
+}
+
 fn text_preview(path: &Path, max_lines: usize) -> String {
+    // Quick binary check: read first 512 bytes only
+    if let Ok(mut f) = fs::File::open(path) {
+        use std::io::Read;
+        let mut header = [0u8; 512];
+        if let Ok(n) = f.read(&mut header) {
+            if header[..n].iter().any(|&b| b == 0) {
+                let meta = fs::metadata(path).ok();
+                return format!("{}\n\n{}\nSize: {}",
+                    style::bold(&path.file_name().unwrap_or_default().to_string_lossy()),
+                    style::fg("[Binary file]", 245),
+                    format_size(meta.as_ref().map(|m| m.len()).unwrap_or(0)));
+            }
+        }
+    }
     match fs::read(path) {
         Ok(bytes) => {
             let content = String::from_utf8_lossy(&bytes);
@@ -302,7 +448,7 @@ pub fn is_text_ext(ext: &str) -> bool {
         "r" | "sql" | "diff" | "patch" | "zig" | "nim" | "el" | "lisp" |
         "clj" | "ex" | "exs" | "erl" | "hs" | "ml" | "mli" | "swift" |
         "kt" | "kts" | "scala" | "v" | "sv" | "vhd" | "tcl" | "rkt" |
-        ""
+        "xrpn" | ""
     )
 }
 
