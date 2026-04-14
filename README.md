@@ -47,7 +47,7 @@ Press `?` for built-in help. Press `q` to quit (saves state).
 
 - **Two-pane layout** with configurable width ratio and border styles
 - **LS_COLORS support** for consistent terminal theming
-- **Syntax highlighting** via bat/batcat
+- **Syntax highlighting** built-in (20+ languages) with 6 themes, bat as optional toggle
 - **Image preview** via kitty/sixel/w3m protocols (using glow)
 - **Archive browsing** (zip, tar, gz, bz2, xz, rar, 7z as virtual directories)
 - **SSH/SFTP remote browsing** (Ctrl-E)
@@ -85,7 +85,7 @@ Press `?` for built-in help. Press `q` to quit (saves state).
 | HOME/END | First/last | i | Invert sort |
 | ~ | Home directory | - | Toggle preview |
 | ' | Jump to mark | _ | Toggle images |
-| > | Follow symlink | b | Toggle bat highlighting |
+| > | Follow symlink | b | Toggle bat/internal syntax |
 | **Tags** | | **Search** | |
 | t | Tag/untag | / | Search filenames |
 | T | Show tagged | n/N | Next/prev match |
@@ -106,8 +106,8 @@ Press `?` for built-in help. Press `q` to quit (saves state).
 | M | Show marks | G | Git status |
 | **Clipboard** | | H | Hash directory |
 | y | Yank to primary | S | System info |
-| Y | Yank to clipboard | I | AI describe |
-| Ctrl-Y | Copy right pane | Ctrl-A | AI chat |
+| Y | Yank to clipboard | C | Preferences editor |
+| Ctrl-Y | Copy right pane | I | AI describe |
 
 ### Right Pane Scrolling
 
@@ -142,7 +142,8 @@ Plugins: `~/.pointer/plugins/`
   "c_status_fg": 252, "c_status_bg": 236,
   "topmatch": [["PassionFruit", 171], ["Dualog", 72], ["", 249]],
   "ai_key": "",
-  "ai_model": "gpt-4o-mini"
+  "ai_model": "gpt-4o-mini",
+  "syntax_theme": "monokai"
 }
 ```
 
@@ -206,7 +207,7 @@ Commands receive `POINTER_CONTEXT` env var with JSON state. Unmatched keys fall 
 **Build**: Rust toolchain (cargo)
 
 **Runtime** (optional, for full features):
-- `bat` or `batcat` for syntax highlighting
+- `bat` or `batcat` for external syntax highlighting (optional, built-in highlighter is default)
 - `fzf` for fuzzy finding
 - `ImageMagick` (`convert`, `identify`) for image preview
 - `pdftotext` for PDF preview

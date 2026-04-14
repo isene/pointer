@@ -13,6 +13,8 @@ impl App {
   G/END       Go to bottom\n\
   PgDN/Space  Page down\n\
   PgUP        Page up\n\
+  ~           Home directory\n\
+  >           Follow symlink\n\
 \n\
 {}\n\
   a           Toggle hidden files\n\
@@ -22,23 +24,26 @@ impl App {
   w           Change pane width\n\
   B           Cycle border style\n\
   -           Toggle preview pane\n\
-  b           Toggle bat syntax highlighting\n\
+  _           Toggle image preview\n\
+  b           Toggle bat/internal syntax\n\
 \n\
 {}\n\
   /           Search filenames\n\
-  n           Next search match\n\
-  N           Previous search match\n\
+  n/N         Next/prev search match\n\
   \\           Clear search\n\
   f           Filter by extension\n\
   F           Filter by regex\n\
   Ctrl-F      Clear filter\n\
+  g           Grep file contents\n\
+  L           Locate file\n\
+  Ctrl-N      Navi cheatsheets\n\
+  Ctrl-P      fzf fuzzy finder\n\
 \n\
 {}\n\
   m           Set bookmark\n\
   '           Jump to bookmark\n\
   M           Show all bookmarks\n\
-  ~           Go to home directory\n\
-  >           Follow symlink\n\
+  Ctrl-R      Recent files/dirs\n\
 \n\
 {}\n\
   t           Tag/untag current item\n\
@@ -53,28 +58,45 @@ impl App {
   c           Rename current item\n\
   s           Create symlinks\n\
   =           Create directory\n\
+  E           Bulk rename\n\
+  X           Compare (2 tagged files)\n\
+  x           Extract archive\n\
+  Z           Create archive\n\
   U           Undo last operation\n\
 \n\
 {}\n\
   :           Shell command mode\n\
   ;           Command history\n\
+  @           Script evaluator\n\
+  +           Add to interactive list\n\
 \n\
 {}\n\
-  ]           New tab\n\
-  [           Close tab\n\
-  J           Next tab\n\
-  K           Previous tab\n\
+  ]  /  [     New / close tab\n\
+  J  /  K     Next / prev tab\n\
   1-9         Switch to tab\n\
+  {{  /  }}     Rename / duplicate tab\n\
 \n\
 {}\n\
-  Shift-UP/DN Scroll line\n\
-  TAB/S-TAB   Scroll page\n\
+  S-DOWN/UP   Scroll right pane line\n\
+  TAB/S-TAB   Scroll right pane page\n\
+  ENTER       Refresh preview\n\
 \n\
 {}\n\
+  C           Preferences editor\n\
+  W           Save config to disk\n\
+  R           Reload config\n\
+  V           Plugin manager\n\
+  I           AI describe file\n\
+  Ctrl-A      AI chat\n\
+  Ctrl-E      SSH browser\n\
   e           File properties\n\
-  y           Copy path (primary)\n\
-  Y           Copy path (clipboard)\n\
-  r           Refresh\n\
+  D           Git status\n\
+  H           Hash directory\n\
+  S           System info\n\
+  y/Y         Copy path primary/clipboard\n\
+  Ctrl-Y      Copy right pane content\n\
+  r           Refresh directory\n\
+  v           Show version\n\
   ?           This help\n\
   q           Quit (save state)\n\
   Q           Quit (no save)",
