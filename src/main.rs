@@ -59,10 +59,9 @@ fn main() {
             // --- BASIC ---
             "?" => { app.show_help(); }
             "v" => { app.show_version(); }
-            "r" => { app.refresh(); app.reload_and_render(); }
+            "r" => { app.show_recent(); }
             "R" => { app.reload_config(); app.render(); }
             "C" => { app.show_config(); }
-            "W" => { app.write_config(); }
             "V" => { app.plugin_manager(); }
             "q" => {
                 app.save_and_quit();
@@ -79,7 +78,8 @@ fn main() {
 
             // --- LAYOUT ---
             "w" => { app.change_width(); app.render(); }
-            "B" => { app.toggle_border(); app.render(); }
+            "W" => { app.change_width_reverse(); app.render(); }
+            "C-B" => { app.toggle_border(); app.render(); }
             "-" => { app.toggle_preview(); app.render(); }
             "_" => { app.toggle_image(); app.render(); }
             "b" => { app.toggle_bat(); app.force_render_right(); }
@@ -119,7 +119,7 @@ fn main() {
             "U" => { app.undo(); app.reload_and_render(); }
 
             // --- RECENT ---
-            "C-R" => { app.show_recent(); }
+            "C-R" => { app.refresh(); app.reload_and_render(); }
 
             // --- TABS ---
             "]" => { app.tab_new(); app.render(); }
@@ -155,15 +155,15 @@ fn main() {
             // --- SEARCH & FILTER ---
             "f" => { app.filter_ext_prompt(); app.reload_and_render(); }
             "F" => { app.filter_regex_prompt(); app.reload_and_render(); }
-            "C-F" => { app.filter_clear(); app.reload_and_render(); }
+            "C-F" => { app.fzf_jump(); app.reload_and_render(); }
             "/" => { app.search_prompt(); app.render(); }
-            "\\" => { app.search_clear(); app.render(); }
+            "\\" => { app.search_clear(); app.filter_clear(); app.reload_and_render(); }
             "n" => { app.search_next(); app.render(); }
             "N" => { app.search_prev(); app.render(); }
             "g" => { app.grep_files(); }
             "L" => { app.locate_files(); }
             "#" => { app.jump_locate(); app.reload_and_render(); }
-            "C-L" => { app.fzf_jump(); app.reload_and_render(); }
+            "C-L" => { app.refresh(); app.reload_and_render(); }
             "C-N" => { app.navi_invoke(); app.render(); }
 
             // --- ARCHIVES ---

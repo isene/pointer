@@ -89,8 +89,10 @@ Press `?` for built-in help. Press `q` to quit (saves state).
 | **Tags** | | **Search** | |
 | t | Tag/untag | / | Search filenames |
 | T | Show tagged | n/N | Next/prev match |
-| u | Clear tags | g | Grep file contents |
+| u | Clear tags | \\ | Clear search & filter |
 | Ctrl-T | Tag by pattern | f/F | Filter ext/regex |
+| | | g | Grep file contents |
+| | | Ctrl-F | fzf fuzzy finder |
 | **File Ops** | | **Tabs** | |
 | p | Copy here | ] / [ | New / close tab |
 | P | Move here | J/K | Prev/next tab |
@@ -101,13 +103,16 @@ Press `?` for built-in help. Press `q` to quit (saves state).
 | E | Bulk rename | ; | Command history |
 | X | Compare (2 tagged) | @ | Script evaluator |
 | U | Undo | + | Add to interactive |
-| **Marks** | | **Info** | |
-| m | Set mark | e | File properties |
-| M | Show marks | G | Git status |
-| **Clipboard** | | H | Hash directory |
-| y | Yank to primary | S | System info |
-| Y | Yank to clipboard | C | Preferences editor |
-| Ctrl-Y | Copy right pane | I | AI describe |
+| **Marks** | | **UI** | |
+| m | Set mark | w/W | Pane width fwd/back |
+| M | Show marks | Ctrl-B | Cycle border |
+| r | Recent files/dirs | C | Preferences editor |
+| **Clipboard** | | **Info** | |
+| y | Yank to primary | e | File properties |
+| Y | Yank to clipboard | G | Git status |
+| Ctrl-Y | Copy right pane | H | Hash directory |
+| | | S | System info |
+| Ctrl-L/Ctrl-R | Redraw/Refresh | I | AI describe |
 
 ### Right Pane Scrolling
 

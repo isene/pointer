@@ -21,8 +21,8 @@ impl App {
   A           Toggle long format\n\
   o           Cycle sort (name/size/time/ext)\n\
   i           Invert sort order\n\
-  w           Change pane width\n\
-  B           Cycle border style\n\
+  w/W         Change pane width fwd/back\n\
+  Ctrl-B      Cycle border style\n\
   -           Toggle preview pane\n\
   _           Toggle image preview\n\
   b           Toggle bat/internal syntax\n\
@@ -30,20 +30,19 @@ impl App {
 {}\n\
   /           Search filenames\n\
   n/N         Next/prev search match\n\
-  \\           Clear search\n\
+  \\           Clear search and filter\n\
   f           Filter by extension\n\
   F           Filter by regex\n\
-  Ctrl-F      Clear filter\n\
+  Ctrl-F      fzf fuzzy finder\n\
   g           Grep file contents\n\
   L           Locate file\n\
   Ctrl-N      Navi cheatsheets\n\
-  Ctrl-P      fzf fuzzy finder\n\
 \n\
 {}\n\
   m           Set bookmark\n\
   '           Jump to bookmark\n\
   M           Show all bookmarks\n\
-  Ctrl-R      Recent files/dirs\n\
+  r           Recent files/dirs\n\
 \n\
 {}\n\
   t           Tag/untag current item\n\
@@ -87,19 +86,18 @@ impl App {
 \n\
 {}\n\
   C           Preferences editor\n\
-  W           Save config to disk\n\
   R           Reload config\n\
   V           Plugin manager\n\
   I           AI describe file\n\
   Ctrl-A      AI chat\n\
   Ctrl-E      SSH browser\n\
   e           File properties\n\
-  D           Git status\n\
+  G           Git status\n\
   H           Hash directory\n\
   S           System info\n\
   y/Y         Copy path primary/clipboard\n\
   Ctrl-Y      Copy right pane content\n\
-  r           Refresh directory\n\
+  Ctrl-L/Ctrl-R  Redraw/Refresh\n\
   v           Show version\n\
   ?           This help\n\
   q           Quit (save state)\n\

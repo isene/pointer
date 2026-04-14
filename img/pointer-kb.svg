@@ -232,7 +232,7 @@
 
   <rect x="374" y="286" width="62" height="55" class="key"/>
   <text x="405" y="302" class="kl">B</text>
-  <text x="405" y="320" class="up">Border</text>
+  <text x="405" y="320" class="up">C-B Border</text>
   <text x="405" y="333" class="lo">syntax hl</text>
 
   <rect x="440" y="286" width="62" height="55" class="key"/>
@@ -314,17 +314,18 @@
   <text x="1194" y="80" class="ct">C-A   AI chat mode</text>
   <text x="1194" y="100" class="ct">C-D   Toggle trash view</text>
   <text x="1194" y="120" class="ct">C-E   SSH browse</text>
-  <text x="1194" y="140" class="ct">C-F   Clear filter</text>
-  <text x="1194" y="160" class="ct">C-L   fzf jump</text>
-  <text x="1194" y="180" class="ct">C-N   Navi cheatsheet</text>
-  <text x="1194" y="200" class="ct">C-O   Change ownership</text>
-  <text x="1194" y="220" class="ct">C-P   Change permissions</text>
-  <text x="1194" y="240" class="ct">C-R   Recent files</text>
-  <text x="1194" y="260" class="ct">C-T   Tag by pattern</text>
-  <text x="1194" y="280" class="ct">C-Y   Copy pane to clipboard</text>
-  <text x="1194" y="308" class="ct">S-Arrows   Scroll right pane</text>
-  <text x="1194" y="328" class="ct">S-Tab      Page up right pane</text>
-  <text x="1194" y="348" class="ct">Tab        Page down right pane</text>
+  <text x="1194" y="140" class="ct">C-B   Cycle border style</text>
+  <text x="1194" y="160" class="ct">C-F   fzf jump</text>
+  <text x="1194" y="180" class="ct">C-L   Redraw screen</text>
+  <text x="1194" y="200" class="ct">C-N   Navi cheatsheet</text>
+  <text x="1194" y="220" class="ct">C-O   Change ownership</text>
+  <text x="1194" y="240" class="ct">C-P   Change permissions</text>
+  <text x="1194" y="260" class="ct">C-R   Refresh directory</text>
+  <text x="1194" y="280" class="ct">C-T   Tag by pattern</text>
+  <text x="1194" y="300" class="ct">C-Y   Copy pane to clipboard</text>
+  <text x="1194" y="328" class="ct">S-Arrows   Scroll right pane</text>
+  <text x="1194" y="348" class="ct">S-Tab      Page up right pane</text>
+  <text x="1194" y="368" class="ct">Tab        Page down right pane</text>
 
   <!-- Legend -->
   <rect x="20" y="470" width="14" height="14" fill="#442222" rx="2" stroke="#663333" stroke-width="0.5"/>

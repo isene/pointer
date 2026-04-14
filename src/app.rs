@@ -661,11 +661,21 @@ impl App {
         let mut w = self.config.width;
         w = if w >= 7 { 2 } else { w + 1 };
         self.config.width = w;
+        self.config.save();
+        self.resize();
+    }
+
+    pub fn change_width_reverse(&mut self) {
+        let mut w = self.config.width;
+        w = if w <= 2 { 7 } else { w - 1 };
+        self.config.width = w;
+        self.config.save();
         self.resize();
     }
 
     pub fn toggle_border(&mut self) {
         self.config.border = (self.config.border + 1) % 4;
+        self.config.save();
         self.rebuild_panes();
     }
 
