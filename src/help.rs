@@ -82,6 +82,10 @@ impl App {
   ENTER       Refresh preview\n\
 \n\
 {}\n\
+  Ctrl-D      Toggle trash on/off\n\
+  D           Browse trash (E to empty)\n\
+\n\
+{}\n\
   C           Preferences editor\n\
   W           Save config to disk\n\
   R           Reload config\n\
@@ -110,6 +114,7 @@ impl App {
             style::fg("Command", 220),
             style::fg("Tabs", 220),
             style::fg("Right Pane", 220),
+            style::fg("Trash", 220),
             style::fg("Other", 220),
         );
 

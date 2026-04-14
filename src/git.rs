@@ -361,24 +361,58 @@ impl App {
             return;
         };
 
-        let items: Vec<String> = entries
+        let items: Vec<(String, u64)> = entries
             .flatten()
             .map(|e| {
                 let name = e.file_name().to_string_lossy().to_string();
                 let size = e.metadata().ok().map(|m| m.len()).unwrap_or(0);
-                format!("  {} ({})", name, crate::entry::format_size(size))
+                (name, size)
             })
             .collect();
 
         if items.is_empty() {
             self.show_in_right(" Trash is empty");
         } else {
+            let total: u64 = items.iter().map(|(_, s)| s).sum();
             let mut lines = vec![
-                style::bold(&format!("Trash ({} items)", items.len())),
+                style::bold(&format!("Trash ({} items, {})", items.len(), crate::entry::format_size(total))),
+                style::fg("  E: Empty trash  ESC: Close", 220),
                 String::new(),
             ];
-            lines.extend(items);
+            for (name, size) in &items {
+                lines.push(format!("  {} ({})", name, crate::entry::format_size(*size)));
+            }
             self.show_in_right(&lines.join("\n"));
+
+            // Wait for action
+            loop {
+                let Some(key) = crust::Input::getchr(None) else { break };
+                match key.as_str() {
+                    "E" => {
+                        let count = items.len();
+                        if let Ok(entries) = std::fs::read_dir(&trash_dir) {
+                            for entry in entries.flatten() {
+                                let path = entry.path();
+                                if path.is_dir() {
+                                    let _ = std::fs::remove_dir_all(&path);
+                                } else {
+                                    let _ = std::fs::remove_file(&path);
+                                }
+                            }
+                        }
+                        self.unlock_right_pane();
+                        self.render();
+                        self.msg_success(&format!("Emptied trash ({} items)", count));
+                        break;
+                    }
+                    "ESC" | "q" | "D" => {
+                        self.unlock_right_pane();
+                        self.render();
+                        break;
+                    }
+                    _ => {}
+                }
+            }
         }
     }
 }

@@ -157,7 +157,7 @@ dependencies = [
 
 [[package]]
 name = "pointer"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "fe2o3-crust",
  "fe2o3-glow",
