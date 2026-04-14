@@ -3,7 +3,7 @@
 //! Supports multiple color themes via Theme struct.
 
 use crust::style;
-use std::sync::OnceLock;
+use std::sync::Mutex;
 
 #[derive(Clone, Copy)]
 pub struct Theme {
@@ -17,14 +17,18 @@ pub struct Theme {
     pub punct: u8,
 }
 
-static ACTIVE_THEME: OnceLock<Theme> = OnceLock::new();
+static ACTIVE_THEME: Mutex<Option<Theme>> = Mutex::new(None);
 
 pub fn set_theme(name: &str) {
-    let _ = ACTIVE_THEME.set(theme_by_name(name));
+    if let Ok(mut t) = ACTIVE_THEME.lock() {
+        *t = Some(theme_by_name(name));
+    }
 }
 
 fn theme() -> Theme {
-    *ACTIVE_THEME.get_or_init(|| theme_by_name("monokai"))
+    ACTIVE_THEME.lock().ok()
+        .and_then(|t| *t)
+        .unwrap_or_else(|| theme_by_name("monokai"))
 }
 
 pub fn theme_by_name(name: &str) -> Theme {

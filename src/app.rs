@@ -713,16 +713,195 @@ impl App {
     // --- Config management ---
 
     pub fn show_config(&mut self) {
-        let path = crate::config::config_path_str();
-        match std::fs::read_to_string(&path) {
-            Ok(content) => {
-                self.right.set_text(&content);
-                self.right.ix = 0;
-                self.right.refresh();
-                self.prev_selected = Some(PathBuf::new());
+        use crust::Input;
+        let themes = crate::highlight::available_themes();
+        let sort_modes = ["name", "size", "time", "ext"];
+        let border_modes = ["0: none", "1: right", "2: both", "3: left"];
+
+        loop {
+            let theme_idx = themes.iter().position(|t| *t == self.config.syntax_theme).unwrap_or(0);
+            let sort_idx = sort_modes.iter().position(|s| *s == self.config.sort_mode).unwrap_or(0);
+
+            let mut lines = Vec::new();
+            lines.push(String::new());
+            lines.push(format!("  {}", style::bold("Preferences")));
+            let sep_w = 40;
+            lines.push(format!("  {}", style::fg(&"-".repeat(sep_w), 238)));
+            lines.push(String::new());
+            lines.push(format!("  {} Width:        {}/7", style::fg("w", 220), self.config.width));
+            lines.push(format!("  {} Border:       {}", style::fg("b", 220), border_modes[self.config.border as usize % 4]));
+            lines.push(format!("  {} Preview:      {}", style::fg("p", 220),
+                if self.config.preview { style::fg("on", 35) } else { style::fg("off", 196) }));
+            lines.push(format!("  {} Syntax:       {}", style::fg("s", 220),
+                if self.config.bat { style::fg("bat (external)", 81) }
+                else { style::fg(&format!("internal ({})", themes[theme_idx]), 81) }));
+            lines.push(format!("  {} Theme:        {}", style::fg("t", 220), style::fg(themes[theme_idx], 81)));
+            lines.push(format!("  {} Hidden files: {}", style::fg("h", 220),
+                if self.show_hidden { style::fg("shown", 35) } else { style::fg("hidden", 196) }));
+            lines.push(format!("  {} Long format:  {}", style::fg("l", 220),
+                if self.long_format { style::fg("on", 35) } else { style::fg("off", 196) }));
+            lines.push(format!("  {} Sort:         {}{}", style::fg("o", 220),
+                sort_modes[sort_idx],
+                if self.sort_invert { " (reversed)" } else { "" }));
+            lines.push(format!("  {} Sort reverse: {}", style::fg("i", 220),
+                if self.sort_invert { style::fg("on", 35) } else { style::fg("off", 196) }));
+            lines.push(format!("  {} Trash:        {}", style::fg("x", 220),
+                if self.config.trash { style::fg("on", 35) } else { style::fg("off", 196) }));
+            lines.push(String::new());
+            lines.push(format!("  {}", style::fg(&"-".repeat(sep_w), 238)));
+            lines.push(format!("  {} Top fg:       {}", style::fg("1", 220), self.config.c_top_fg));
+            lines.push(format!("  {} Top bg:       {}", style::fg("2", 220), self.config.c_top_bg));
+            lines.push(format!("  {} Status fg:    {}", style::fg("3", 220), self.config.c_status_fg));
+            lines.push(format!("  {} Status bg:    {}", style::fg("4", 220), self.config.c_status_bg));
+            lines.push(String::new());
+            lines.push(format!("  {}", style::fg(&"-".repeat(sep_w), 238)));
+            lines.push(format!("  {} Top bg matching:", style::fg("m", 220)));
+            for (i, (pattern, color)) in self.config.topmatch.iter().enumerate() {
+                let p = if pattern.is_empty() { "(default)" } else { pattern };
+                lines.push(format!("    {} {} \u{2192} {}", style::fg(&format!("{}", i), 245), p,
+                    style::fg(&format!("{}", color), *color as u8)));
             }
-            Err(_) => self.msg_error("Cannot read config file"),
+            lines.push(format!("    {} add  {} remove", style::fg("+", 220), style::fg("-", 220)));
+            lines.push(String::new());
+            lines.push(format!("  {}", style::fg(&"-".repeat(sep_w), 238)));
+            lines.push(format!("  {} Save config", style::fg("W", 220)));
+            lines.push(format!("  {} Show config file", style::fg("F", 220)));
+            lines.push(format!("  {} Close", style::fg("ESC", 220)));
+
+            self.show_in_right(&lines.join("\n"));
+
+            let Some(key) = Input::getchr(None) else { break };
+            match key.as_str() {
+                "ESC" | "q" | "C" => {
+                    self.unlock_right_pane();
+                    self.render();
+                    break;
+                }
+                "w" => {
+                    self.config.width = if self.config.width >= 7 { 2 } else { self.config.width + 1 };
+                    self.resize();
+                    self.render_top();
+                    self.render_left();
+                    self.render_status();
+                }
+                "b" => {
+                    self.config.border = (self.config.border + 1) % 4;
+                    self.resize();
+                    self.render_top();
+                    self.render_left();
+                    self.render_status();
+                }
+                "p" => {
+                    self.config.preview = !self.config.preview;
+                }
+                "s" => {
+                    self.config.bat = !self.config.bat;
+                    preview::clear_cache(&self.preview_cache);
+                }
+                "t" => {
+                    let next = (theme_idx + 1) % themes.len();
+                    self.config.syntax_theme = themes[next].to_string();
+                    crate::highlight::set_theme(themes[next]);
+                    preview::clear_cache(&self.preview_cache);
+                }
+                "h" => {
+                    self.show_hidden = !self.show_hidden;
+                    self.config.show_hidden = self.show_hidden;
+                    self.load_dir();
+                }
+                "l" => {
+                    self.long_format = !self.long_format;
+                    self.config.long_format = self.long_format;
+                }
+                "o" => {
+                    let next = (sort_idx + 1) % sort_modes.len();
+                    self.config.sort_mode = sort_modes[next].to_string();
+                    self.sort_mode = crate::entry::SortMode::from_str(sort_modes[next]);
+                    self.load_dir();
+                }
+                "i" => {
+                    self.sort_invert = !self.sort_invert;
+                    self.config.sort_invert = self.sort_invert;
+                    self.load_dir();
+                }
+                "x" => {
+                    self.config.trash = !self.config.trash;
+                }
+                "1" => {
+                    let val = self.prompt_value("Top fg (0-255): ");
+                    if let Some(v) = val { self.config.c_top_fg = v; self.top.fg = v; }
+                }
+                "2" => {
+                    let val = self.prompt_value("Top bg (0-255): ");
+                    if let Some(v) = val { self.config.c_top_bg = v; self.top.bg = v; }
+                }
+                "3" => {
+                    let val = self.prompt_value("Status fg (0-255): ");
+                    if let Some(v) = val { self.config.c_status_fg = v; self.status.fg = v; }
+                }
+                "4" => {
+                    let val = self.prompt_value("Status bg (0-255): ");
+                    if let Some(v) = val { self.config.c_status_bg = v; self.status.bg = v; }
+                }
+                "m" => {
+                    // Edit existing topmatch entry by index
+                    let idx_str = self.prompt_value_str("Edit entry # (or Enter to skip): ");
+                    if let Ok(idx) = idx_str.parse::<usize>() {
+                        if idx < self.config.topmatch.len() {
+                            let (ref old_pat, _) = self.config.topmatch[idx];
+                            let new_color = self.prompt_value(&format!("New color for '{}' (0-255): ",
+                                if old_pat.is_empty() { "(default)" } else { old_pat }));
+                            if let Some(c) = new_color {
+                                self.config.topmatch[idx].1 = c;
+                            }
+                        }
+                    }
+                }
+                "+" => {
+                    let pattern = self.prompt_value_str("Path pattern (empty=default): ");
+                    let color = self.prompt_value("Top bg color (0-255): ");
+                    if let Some(c) = color {
+                        self.config.topmatch.push((pattern, c));
+                    }
+                }
+                "-" => {
+                    if self.config.topmatch.len() > 1 {
+                        let idx_str = self.prompt_value_str("Remove entry #: ");
+                        if let Ok(idx) = idx_str.parse::<usize>() {
+                            if idx < self.config.topmatch.len() {
+                                self.config.topmatch.remove(idx);
+                            }
+                        }
+                    }
+                }
+                "W" => {
+                    self.write_config();
+                }
+                "F" => {
+                    let path = crate::config::config_path_str();
+                    if let Ok(content) = std::fs::read_to_string(&path) {
+                        self.show_in_right(&content);
+                    }
+                    if let Some(k) = Input::getchr(None) {
+                        if k == "ESC" || k == "q" { continue; }
+                    }
+                }
+                _ => {}
+            }
         }
+    }
+
+    fn prompt_value(&mut self, label: &str) -> Option<u16> {
+        let result = self.prompt_value_str(label);
+        result.parse::<u16>().ok()
+    }
+
+    fn prompt_value_str(&mut self, label: &str) -> String {
+        let result = self.status.ask_with_bg(label, "", self.config.c_status_bg);
+        self.status.bg = self.config.c_status_bg;
+        self.status.full_refresh();
+        self.render_status();
+        result
     }
 
     pub fn write_config(&mut self) {
