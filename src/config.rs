@@ -57,7 +57,11 @@ pub struct Config {
     pub ai_key: String,
     #[serde(default = "default_ai_model")]
     pub ai_model: String,
+    #[serde(default = "default_syntax_theme")]
+    pub syntax_theme: String,
 }
+
+fn default_syntax_theme() -> String { "monokai".into() }
 
 fn default_width() -> u8 { 4 }
 fn default_border() -> u8 { 2 }
@@ -95,6 +99,7 @@ impl Default for Config {
             topmatch: default_topmatch(),
             ai_key: String::new(),
             ai_model: default_ai_model(),
+            syntax_theme: default_syntax_theme(),
         }
     }
 }

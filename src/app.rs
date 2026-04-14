@@ -57,11 +57,13 @@ pub struct App {
     pub preview_cache: crate::preview::PreviewCache,
     pub dir_mtime: Option<std::time::SystemTime>,
     pub preload_busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub right_pane_locked: bool,
 }
 
 impl App {
     pub fn new() -> Self {
         let config = Config::load();
+        crate::highlight::set_theme(&config.syntax_theme);
         let state = State::load();
         let (cols, rows) = Crust::terminal_size();
         let ls_colors = entry::parse_ls_colors();
@@ -114,6 +116,7 @@ impl App {
             preview_cache: crate::preview::new_cache(),
             dir_mtime: None,
             preload_busy: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            right_pane_locked: false,
         };
 
         app.rebuild_panes();
@@ -308,6 +311,8 @@ impl App {
     }
 
     fn render_right(&mut self) {
+        if self.right_pane_locked { return; }
+
         let selected_path = self.files.get(self.index).map(|e| e.path.clone());
 
         // Only re-render if selection changed
@@ -372,8 +377,8 @@ impl App {
         self.clear_image();
         self.right.set_text(text);
         self.right.ix = 0;
-        self.right.full_refresh(); // full_refresh clears diff cache, redraws everything
-        self.prev_selected = Some(PathBuf::new());
+        self.right.full_refresh();
+        self.right_pane_locked = true;
     }
 
     fn render_status(&mut self) {
@@ -456,9 +461,14 @@ impl App {
 
     // --- Navigation ---
 
+    pub fn unlock_right_pane(&mut self) {
+        self.right_pane_locked = false;
+        self.prev_selected = None; // force re-render on next render_right
+    }
+
     pub fn move_down(&mut self) {
         if self.files.is_empty() { return; }
-        // Wrap around
+        self.unlock_right_pane();
         if self.index >= self.files.len() - 1 {
             self.index = 0;
         } else {
@@ -468,7 +478,7 @@ impl App {
 
     pub fn move_up(&mut self) {
         if self.files.is_empty() { return; }
-        // Wrap around
+        self.unlock_right_pane();
         if self.index == 0 {
             self.index = self.files.len() - 1;
         } else {
@@ -477,25 +487,30 @@ impl App {
     }
 
     pub fn go_top(&mut self) {
+        self.unlock_right_pane();
         self.index = 0;
         self.scroll_ix = 0;
     }
 
     pub fn go_bottom(&mut self) {
+        self.unlock_right_pane();
         self.index = self.files.len().saturating_sub(1);
     }
 
     pub fn page_down(&mut self) {
+        self.unlock_right_pane();
         let page = visible_height(&self.left);
         self.index = (self.index + page).min(self.files.len().saturating_sub(1));
     }
 
     pub fn page_up(&mut self) {
+        self.unlock_right_pane();
         let page = visible_height(&self.left);
         self.index = self.index.saturating_sub(page);
     }
 
     pub fn enter(&mut self) {
+        self.unlock_right_pane();
         if self.is_archive_mode() {
             self.archive_enter();
             return;
@@ -529,6 +544,7 @@ impl App {
     }
 
     pub fn go_up_dir(&mut self) {
+        self.unlock_right_pane();
         if self.is_archive_mode() {
             self.archive_go_up();
             return;
@@ -637,7 +653,7 @@ impl App {
         if self.config.bat {
             self.msg_info("Syntax: bat (external)");
         } else {
-            self.msg_info("Syntax: internal");
+            self.msg_info(&format!("Syntax: internal ({})", self.config.syntax_theme));
         }
     }
 

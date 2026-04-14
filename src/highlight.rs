@@ -1,17 +1,65 @@
 //! Lightweight syntax highlighter for common file types.
 //! Replaces bat for fast, zero-spawn preview highlighting.
+//! Supports multiple color themes via Theme struct.
 
 use crust::style;
+use std::sync::OnceLock;
 
-// ANSI 256-color palette (vivid, bat-like Monokai)
-const C_KEYWORD: u8 = 197;  // hot pink/red
-const C_STRING: u8 = 78;    // vivid green
-const C_COMMENT: u8 = 242;  // gray
-const C_NUMBER: u8 = 141;   // vivid purple
-const C_TYPE: u8 = 81;      // vivid cyan
-const C_FUNC: u8 = 148;     // bright yellow-green
-const C_PREPROC: u8 = 197;  // hot pink (same as keyword for #include etc.)
-const C_PUNCT: u8 = 248;    // light gray
+#[derive(Clone, Copy)]
+pub struct Theme {
+    pub keyword: u8,
+    pub string: u8,
+    pub comment: u8,
+    pub number: u8,
+    pub typ: u8,
+    pub func: u8,
+    pub preproc: u8,
+    pub punct: u8,
+}
+
+static ACTIVE_THEME: OnceLock<Theme> = OnceLock::new();
+
+pub fn set_theme(name: &str) {
+    let _ = ACTIVE_THEME.set(theme_by_name(name));
+}
+
+fn theme() -> Theme {
+    *ACTIVE_THEME.get_or_init(|| theme_by_name("monokai"))
+}
+
+pub fn theme_by_name(name: &str) -> Theme {
+    match name {
+        "monokai" => Theme {
+            keyword: 197, string: 78, comment: 242, number: 141,
+            typ: 81, func: 148, preproc: 197, punct: 248,
+        },
+        "solarized" => Theme {
+            keyword: 136, string: 64, comment: 245, number: 125,
+            typ: 33, func: 166, preproc: 136, punct: 240,
+        },
+        "nord" => Theme {
+            keyword: 110, string: 108, comment: 60, number: 176,
+            typ: 73, func: 222, preproc: 110, punct: 103,
+        },
+        "dracula" => Theme {
+            keyword: 212, string: 84, comment: 61, number: 141,
+            typ: 117, func: 228, preproc: 212, punct: 189,
+        },
+        "gruvbox" => Theme {
+            keyword: 167, string: 142, comment: 245, number: 175,
+            typ: 109, func: 214, preproc: 167, punct: 223,
+        },
+        "plain" => Theme {
+            keyword: 252, string: 252, comment: 245, number: 252,
+            typ: 252, func: 252, preproc: 252, punct: 245,
+        },
+        _ => theme_by_name("monokai"),
+    }
+}
+
+pub fn available_themes() -> &'static [&'static str] {
+    &["monokai", "solarized", "nord", "dracula", "gruvbox", "plain"]
+}
 
 struct Lang {
     line_comment: &'static [&'static str],
@@ -471,7 +519,7 @@ pub fn highlight(text: &str, ext: &str, max_lines: usize) -> String {
 
     for line in text.lines() {
         if line_count >= max_lines {
-            result.push_str(&style::fg("...", C_COMMENT));
+            result.push_str(&style::fg("...", theme().comment));
             break;
         }
         if line_count > 0 { result.push('\n'); }
@@ -481,17 +529,17 @@ pub fn highlight(text: &str, ext: &str, max_lines: usize) -> String {
         if in_block_comment {
             if !lang.block_end.is_empty() {
                 if let Some(pos) = line.find(lang.block_end) {
-                    result.push_str(&style::fg(&line[..pos + lang.block_end.len()], C_COMMENT));
+                    result.push_str(&style::fg(&line[..pos + lang.block_end.len()], theme().comment));
                     in_block_comment = false;
                     let rest = &line[pos + lang.block_end.len()..];
                     if !rest.is_empty() {
                         highlight_line(rest, &lang, &mut result);
                     }
                 } else {
-                    result.push_str(&style::fg(line, C_COMMENT));
+                    result.push_str(&style::fg(line, theme().comment));
                 }
             } else {
-                result.push_str(&style::fg(line, C_COMMENT));
+                result.push_str(&style::fg(line, theme().comment));
             }
             continue;
         }
@@ -506,13 +554,13 @@ pub fn highlight(text: &str, ext: &str, max_lines: usize) -> String {
             }
         }
         if is_line_comment {
-            result.push_str(&style::fg(line, C_COMMENT));
+            result.push_str(&style::fg(line, theme().comment));
             continue;
         }
 
         // Check for preprocessor (#include, #define, etc.)
         if trimmed.starts_with('#') && matches!(ext, "c" | "h" | "cpp" | "hpp" | "cc") {
-            result.push_str(&style::fg(line, C_PREPROC));
+            result.push_str(&style::fg(line, theme().preproc));
             continue;
         }
 
@@ -524,7 +572,7 @@ pub fn highlight(text: &str, ext: &str, max_lines: usize) -> String {
                         // Single-line block comment
                         highlight_line(&line[..pos], &lang, &mut result);
                         let comment_end = pos + lang.block_start.len() + end + lang.block_end.len();
-                        result.push_str(&style::fg(&line[pos..comment_end], C_COMMENT));
+                        result.push_str(&style::fg(&line[pos..comment_end], theme().comment));
                         let rest = &line[comment_end..];
                         if !rest.is_empty() {
                             highlight_line(rest, &lang, &mut result);
@@ -534,7 +582,7 @@ pub fn highlight(text: &str, ext: &str, max_lines: usize) -> String {
                 }
                 // Multi-line block comment starts
                 highlight_line(&line[..pos], &lang, &mut result);
-                result.push_str(&style::fg(&line[pos..], C_COMMENT));
+                result.push_str(&style::fg(&line[pos..], theme().comment));
                 in_block_comment = true;
                 continue;
             }
@@ -570,7 +618,7 @@ fn highlight_line(line: &str, lang: &Lang, out: &mut String) {
                 }
             }
             let s: String = chars[start..i].iter().collect();
-            out.push_str(&style::fg(&s, C_STRING));
+            out.push_str(&style::fg(&s, theme().string));
             continue;
         }
 
@@ -583,7 +631,7 @@ fn highlight_line(line: &str, lang: &Lang, out: &mut String) {
                 i += 1;
             }
             let s: String = chars[start..i].iter().collect();
-            out.push_str(&style::fg(&s, C_TYPE));
+            out.push_str(&style::fg(&s, theme().typ));
             continue;
         }
 
@@ -595,7 +643,7 @@ fn highlight_line(line: &str, lang: &Lang, out: &mut String) {
                 i += 1;
             }
             let s: String = chars[start..i].iter().collect();
-            out.push_str(&style::fg(&s, C_STRING));
+            out.push_str(&style::fg(&s, theme().string));
             continue;
         }
 
@@ -610,7 +658,7 @@ fn highlight_line(line: &str, lang: &Lang, out: &mut String) {
                 i += 1;
             }
             let s: String = chars[start..i].iter().collect();
-            out.push_str(&style::fg(&s, C_KEYWORD));
+            out.push_str(&style::fg(&s, theme().keyword));
             continue;
         }
 
@@ -621,7 +669,7 @@ fn highlight_line(line: &str, lang: &Lang, out: &mut String) {
                 i += 1;
             }
             let s: String = chars[start..i].iter().collect();
-            out.push_str(&style::fg(&s, C_NUMBER));
+            out.push_str(&style::fg(&s, theme().number));
             continue;
         }
 
@@ -633,14 +681,14 @@ fn highlight_line(line: &str, lang: &Lang, out: &mut String) {
             }
             let word: String = chars[start..i].iter().collect();
             if lang.keywords.contains(&word.as_str()) {
-                out.push_str(&style::fg(&word, C_KEYWORD));
+                out.push_str(&style::fg(&word, theme().keyword));
             } else if lang.types.contains(&word.as_str()) {
-                out.push_str(&style::fg(&word, C_TYPE));
+                out.push_str(&style::fg(&word, theme().typ));
             } else if i < len && chars[i] == '(' {
-                out.push_str(&style::fg(&word, C_FUNC));
+                out.push_str(&style::fg(&word, theme().func));
             } else if word.len() > 1 && word.chars().all(|c| c.is_ascii_uppercase() || c == '_' || c.is_ascii_digit()) {
                 // ALL_CAPS constants
-                out.push_str(&style::fg(&word, C_TYPE));
+                out.push_str(&style::fg(&word, theme().typ));
             } else {
                 out.push_str(&word);
             }
@@ -649,7 +697,7 @@ fn highlight_line(line: &str, lang: &Lang, out: &mut String) {
 
         // Punctuation
         if matches!(ch, '{' | '}' | '(' | ')' | '[' | ']' | ';' | ':' | ',' | '.' | '-' | '+' | '*' | '/' | '=' | '<' | '>' | '!' | '&' | '|' | '^' | '~' | '%' | '?' | '@') {
-            out.push_str(&style::fg(&ch.to_string(), C_PUNCT));
+            out.push_str(&style::fg(&ch.to_string(), theme().punct));
             i += 1;
             continue;
         }
@@ -664,7 +712,7 @@ fn plain_with_limit(text: &str, max_lines: usize) -> String {
     let mut count = 0;
     for line in text.lines() {
         if count >= max_lines {
-            result.push_str(&style::fg("\n...", C_COMMENT));
+            result.push_str(&style::fg("\n...", theme().comment));
             break;
         }
         if count > 0 { result.push('\n'); }
