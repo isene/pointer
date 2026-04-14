@@ -361,26 +361,52 @@ impl App {
             return;
         };
 
-        let items: Vec<(String, u64)> = entries
+        let items: Vec<(String, String, u64)> = entries
             .flatten()
             .map(|e| {
-                let name = e.file_name().to_string_lossy().to_string();
+                let raw_name = e.file_name().to_string_lossy().to_string();
                 let size = e.metadata().ok().map(|m| m.len()).unwrap_or(0);
-                (name, size)
+                // Parse "timestamp_originalname" format
+                let (date_str, orig_name) = if let Some(pos) = raw_name.find('_') {
+                    let ts_str = &raw_name[..pos];
+                    if let Ok(ts) = ts_str.parse::<i64>() {
+                        let secs = ts % 86400;
+                        let days = ts / 86400;
+                        let h = secs / 3600; let m = (secs % 3600) / 60;
+                        // Simple date from days since epoch
+                        let d2 = days + 719468;
+                        let era = if d2 >= 0 { d2 } else { d2 - 146096 } / 146097;
+                        let doe = d2 - era * 146097;
+                        let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+                        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+                        let mp = (5 * doy + 2) / 153;
+                        let day = doy - (153 * mp + 2) / 5 + 1;
+                        let mon = if mp < 10 { mp + 3 } else { mp - 9 };
+                        let y = yoe + era * 400 + if mon <= 2 { 1 } else { 0 };
+                        (format!("{:04}-{:02}-{:02} {:02}:{:02}", y, mon, day, h, m),
+                         raw_name[pos + 1..].to_string())
+                    } else {
+                        (String::new(), raw_name.clone())
+                    }
+                } else {
+                    (String::new(), raw_name.clone())
+                };
+                (orig_name, date_str, size)
             })
             .collect();
 
         if items.is_empty() {
             self.show_in_right(" Trash is empty");
         } else {
-            let total: u64 = items.iter().map(|(_, s)| s).sum();
+            let total: u64 = items.iter().map(|(_, _, s)| s).sum();
             let mut lines = vec![
                 style::bold(&format!("Trash ({} items, {})", items.len(), crate::entry::format_size(total))),
                 style::fg("  E: Empty trash  ESC: Close", 220),
                 String::new(),
             ];
-            for (name, size) in &items {
-                lines.push(format!("  {} ({})", name, crate::entry::format_size(*size)));
+            for (name, date, size) in &items {
+                let date_part = if date.is_empty() { String::new() } else { style::fg(&format!(" [{}]", date), 245) };
+                lines.push(format!("  {} ({}){}", name, crate::entry::format_size(*size), date_part));
             }
             self.show_in_right(&lines.join("\n"));
 
