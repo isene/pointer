@@ -449,6 +449,7 @@ impl App {
 
         self.top = Pane::new(1, 1, cols, 1, self.config.c_top_fg, self.config.c_top_bg);
         self.left = Pane::new(lx, content_y, lw, content_h, self.config.c_left_fg, self.config.c_left_bg);
+        self.left.wrap = false;
         self.left.border = left_border;
         self.left.border_fg = Some(self.config.c_border_fg);
         self.right = Pane::new(rx, content_y, rw, content_h, self.config.c_right_fg, self.config.c_right_bg);
