@@ -39,6 +39,10 @@ impl App {
         };
         let path_str = path.to_string_lossy().to_string();
 
+        // Clear text content before showing image to prevent bleed-through
+        self.right.set_text("");
+        self.right.full_refresh();
+
         // Content area IS the pane area (border is outside)
         display.show(&path_str, self.right.x, self.right.y, self.right.w, self.right.h);
 

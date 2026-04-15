@@ -367,6 +367,7 @@ impl App {
     pub fn force_render_right(&mut self) {
         self.clear_image();
         self.prev_selected = None;
+        self.right_pane_locked = false;
         if self.config.preview {
             self.render_right();
         }
@@ -447,10 +448,12 @@ impl App {
         let rw = cols.saturating_sub(split).saturating_sub(3);
 
         self.top = Pane::new(1, 1, cols, 1, self.config.c_top_fg, self.config.c_top_bg);
-        self.left = Pane::new(lx, content_y, lw, content_h, 15, 0);
+        self.left = Pane::new(lx, content_y, lw, content_h, self.config.c_left_fg, self.config.c_left_bg);
         self.left.border = left_border;
-        self.right = Pane::new(rx, content_y, rw, content_h, 255, 0);
+        self.left.border_fg = Some(self.config.c_border_fg);
+        self.right = Pane::new(rx, content_y, rw, content_h, self.config.c_right_fg, self.config.c_right_bg);
         self.right.border = right_border;
+        self.right.border_fg = Some(self.config.c_border_fg);
         self.status = Pane::new(1, rows, cols, 1, self.config.c_status_fg, self.config.c_status_bg);
 
         Crust::clear_screen();
@@ -759,10 +762,15 @@ impl App {
                 if self.config.trash { style::fg("on", 35) } else { style::fg("off", 196) }));
             lines.push(String::new());
             lines.push(format!("  {}", style::fg(&"-".repeat(sep_w), 238)));
-            lines.push(format!("  {} Top fg:       {}", style::fg("1", 220), self.config.c_top_fg));
-            lines.push(format!("  {} Top bg:       {}", style::fg("2", 220), self.config.c_top_bg));
-            lines.push(format!("  {} Status fg:    {}", style::fg("3", 220), self.config.c_status_fg));
-            lines.push(format!("  {} Status bg:    {}", style::fg("4", 220), self.config.c_status_bg));
+            lines.push(format!("  {} Top fg:       {:>3} {}", style::fg("1", 220), self.config.c_top_fg, style::fg("\u{2588}\u{2588}\u{2588}", self.config.c_top_fg as u8)));
+            lines.push(format!("  {} Top bg:       {:>3} {}", style::fg("2", 220), self.config.c_top_bg, style::fg("\u{2588}\u{2588}\u{2588}", self.config.c_top_bg as u8)));
+            lines.push(format!("  {} Status fg:    {:>3} {}", style::fg("3", 220), self.config.c_status_fg, style::fg("\u{2588}\u{2588}\u{2588}", self.config.c_status_fg as u8)));
+            lines.push(format!("  {} Status bg:    {:>3} {}", style::fg("4", 220), self.config.c_status_bg, style::fg("\u{2588}\u{2588}\u{2588}", self.config.c_status_bg as u8)));
+            lines.push(format!("  {} Left fg:      {:>3} {}", style::fg("5", 220), self.config.c_left_fg, style::fg("\u{2588}\u{2588}\u{2588}", self.config.c_left_fg as u8)));
+            lines.push(format!("  {} Left bg:      {:>3} {}", style::fg("6", 220), self.config.c_left_bg, style::fg("\u{2588}\u{2588}\u{2588}", self.config.c_left_bg as u8)));
+            lines.push(format!("  {} Right fg:     {:>3} {}", style::fg("7", 220), self.config.c_right_fg, style::fg("\u{2588}\u{2588}\u{2588}", self.config.c_right_fg as u8)));
+            lines.push(format!("  {} Right bg:     {:>3} {}", style::fg("8", 220), self.config.c_right_bg, style::fg("\u{2588}\u{2588}\u{2588}", self.config.c_right_bg as u8)));
+            lines.push(format!("  {} Border fg:    {:>3} {}", style::fg("9", 220), self.config.c_border_fg, style::fg("\u{2588}\u{2588}\u{2588}", self.config.c_border_fg as u8)));
             lines.push(String::new());
             lines.push(format!("  {}", style::fg(&"-".repeat(sep_w), 238)));
             lines.push(format!("  {} Top bg matching:", style::fg("m", 220)));
@@ -837,21 +845,51 @@ impl App {
                 "x" => {
                     self.config.trash = !self.config.trash;
                 }
-                "1" => {
-                    let val = self.prompt_value("Top fg (0-255): ");
-                    if let Some(v) = val { self.config.c_top_fg = v; self.top.fg = v; }
-                }
-                "2" => {
-                    let val = self.prompt_value("Top bg (0-255): ");
-                    if let Some(v) = val { self.config.c_top_bg = v; self.top.bg = v; }
-                }
-                "3" => {
-                    let val = self.prompt_value("Status fg (0-255): ");
-                    if let Some(v) = val { self.config.c_status_fg = v; self.status.fg = v; }
-                }
-                "4" => {
-                    let val = self.prompt_value("Status bg (0-255): ");
-                    if let Some(v) = val { self.config.c_status_bg = v; self.status.bg = v; }
+                "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => {
+                    let (label, current) = match key.as_str() {
+                        "1" => ("Top fg", self.config.c_top_fg),
+                        "2" => ("Top bg", self.config.c_top_bg),
+                        "3" => ("Status fg", self.config.c_status_fg),
+                        "4" => ("Status bg", self.config.c_status_bg),
+                        "5" => ("Left fg", self.config.c_left_fg),
+                        "6" => ("Left bg", self.config.c_left_bg),
+                        "7" => ("Right fg", self.config.c_right_fg),
+                        "8" => ("Right bg", self.config.c_right_bg),
+                        _ => ("Border fg", self.config.c_border_fg),
+                    };
+                    let val = self.prompt_value(&format!("{} (0-255) [{}]: ", label, current));
+                    if let Some(v) = val {
+                        match key.as_str() {
+                            "1" => { self.config.c_top_fg = v; self.top.fg = v; }
+                            "2" => {
+                                self.config.c_top_bg = v; self.top.bg = v;
+                                // Also update the default topmatch entry
+                                if let Some(entry) = self.config.topmatch.iter_mut().find(|(p, _)| p.is_empty()) {
+                                    entry.1 = v;
+                                }
+                            }
+                            "3" => { self.config.c_status_fg = v; self.status.fg = v; }
+                            "4" => { self.config.c_status_bg = v; self.status.bg = v; }
+                            "5" => { self.config.c_left_fg = v; self.left.fg = v; }
+                            "6" => { self.config.c_left_bg = v; self.left.bg = v; }
+                            "7" => { self.config.c_right_fg = v; self.right.fg = v; }
+                            "8" => { self.config.c_right_bg = v; self.right.bg = v; }
+                            _ => {
+                                self.config.c_border_fg = v;
+                                self.left.border_fg = Some(v);
+                                self.right.border_fg = Some(v);
+                            }
+                        }
+                        // Refresh affected panes (force full redraw to pick up bg changes)
+                        self.top.full_refresh();
+                        self.render_top();
+                        self.left.full_refresh();
+                        self.render_left();
+                        self.status.full_refresh();
+                        self.render_status();
+                        if self.left.border { self.left.border_refresh(); }
+                        if self.right.border { self.right.border_refresh(); }
+                    }
                 }
                 "m" => {
                     // Edit existing topmatch entry by index

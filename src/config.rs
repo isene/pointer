@@ -49,6 +49,16 @@ pub struct Config {
     pub c_status_fg: u16,
     #[serde(default = "default_status_bg")]
     pub c_status_bg: u16,
+    #[serde(default = "default_left_fg")]
+    pub c_left_fg: u16,
+    #[serde(default = "default_left_bg")]
+    pub c_left_bg: u16,
+    #[serde(default = "default_right_fg")]
+    pub c_right_fg: u16,
+    #[serde(default = "default_right_bg")]
+    pub c_right_bg: u16,
+    #[serde(default = "default_border_fg")]
+    pub c_border_fg: u16,
     #[serde(default)]
     pub preview_handlers: HashMap<String, String>,
     #[serde(default = "default_topmatch")]
@@ -77,6 +87,11 @@ fn default_top_fg() -> u16 { 0 }
 fn default_top_bg() -> u16 { 249 }
 fn default_status_fg() -> u16 { 252 }
 fn default_status_bg() -> u16 { 236 }
+fn default_left_fg() -> u16 { 252 }
+fn default_left_bg() -> u16 { 0 }
+fn default_right_fg() -> u16 { 252 }
+fn default_right_bg() -> u16 { 0 }
+fn default_border_fg() -> u16 { 238 }
 
 impl Default for Config {
     fn default() -> Self {
@@ -95,6 +110,11 @@ impl Default for Config {
             c_top_bg: 249,
             c_status_fg: 252,
             c_status_bg: 236,
+            c_left_fg: 252,
+            c_left_bg: 0,
+            c_right_fg: 252,
+            c_right_bg: 0,
+            c_border_fg: 238,
             preview_handlers: HashMap::new(),
             topmatch: default_topmatch(),
             ai_key: String::new(),

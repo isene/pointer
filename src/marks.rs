@@ -39,8 +39,8 @@ impl App {
     pub fn jump_to_mark(&mut self) {
         self.show_marks_display();
 
-        let Some(key) = Input::getchr(None) else { return };
-        if key == "ESC" { return; }
+        let Some(key) = Input::getchr(None) else { self.unlock_right_pane(); return };
+        if key == "ESC" { self.unlock_right_pane(); return; }
 
         if let Some(path) = self.state.marks.get(&key).cloned() {
             let target = std::path::PathBuf::from(&path);
@@ -53,11 +53,14 @@ impl App {
                 self.scroll_ix = 0;
                 self.prev_selected = None;
                 self.load_dir();
+                self.unlock_right_pane();
                 self.msg_success(&format!("Jumped to mark '{}'", key));
             } else {
+                self.unlock_right_pane();
                 self.msg_error(&format!("Mark '{}': directory not found", key));
             }
         } else {
+            self.unlock_right_pane();
             self.msg_warn(&format!("Mark '{}' not set", key));
         }
     }
