@@ -224,6 +224,9 @@ impl App {
         let items = self.op_items();
         if items.is_empty() { return; }
 
+        // Remember current file name for index restoration after delete
+        let current_name = self.files.get(self.index).map(|e| e.name.clone());
+
         // Show tagged items info in right pane like RTFM
         let total_size: u64 = items.iter()
             .filter_map(|p| fs::metadata(p).ok())
@@ -305,6 +308,17 @@ impl App {
         }
         self.prev_selected = None;
         self.load_dir();
+        // Restore index: stay on same file, or clamp if it was deleted
+        if let Some(ref name) = current_name {
+            if let Some(pos) = self.files.iter().position(|e| e.name == *name) {
+                self.index = pos;
+            } else {
+                // Current file was deleted; clamp to valid range
+                if self.index >= self.files.len() {
+                    self.index = self.files.len().saturating_sub(1);
+                }
+            }
+        }
         // Force right pane clear + re-render to prevent artifacts from delete dialog
         self.right.clear();
         self.force_render_right();

@@ -212,13 +212,21 @@ impl App {
 
     /// Show recent files (C-R key)
     pub fn show_recent(&mut self) {
+        // Unified numbered list: files first, then directories. Single digit
+        // (1-9) jumps immediately; ENTER prompts for multi-digit numbers.
+        let files: Vec<String> = self.state.recent_files.iter().take(9).cloned().collect();
+        let dirs: Vec<String> = self.state.recent_dirs.iter().take(9).cloned().collect();
+
+        // Item is ("file"|"dir", path); numbers are 1-based across the whole list.
+        let mut items: Vec<(&'static str, &str)> = Vec::new();
+        for f in &files { items.push(("file", f)); }
+        for d in &dirs { items.push(("dir", d)); }
+
         let mut lines = vec![
             style::fg("Recent Files & Directories", 81),
             "=".repeat(50),
             String::new(),
         ];
-        let files: Vec<String> = self.state.recent_files.iter().take(9).cloned().collect();
-        let dirs: Vec<String> = self.state.recent_dirs.iter().take(9).cloned().collect();
 
         if !files.is_empty() {
             lines.push(style::fg("Files:", 226));
@@ -228,7 +236,7 @@ impl App {
                 let dir = std::path::Path::new(f).parent()
                     .map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
                 lines.push(format!("  {} {} {}",
-                    style::fg(&format!("{}", i + 1), 220),
+                    style::fg(&format!("{:>2}", i + 1), 220),
                     style::fg(&name, 156),
                     style::fg(&dir, 240)));
             }
@@ -243,77 +251,71 @@ impl App {
                     .map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                 let parent = std::path::Path::new(d).parent()
                     .map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+                let num = files.len() + i + 1;
                 lines.push(format!("  {} {} {} {}",
-                    style::fg(&format!("{}", i + 1), 220), mark,
+                    style::fg(&format!("{:>2}", num), 220), mark,
                     style::fg(&name, 156),
                     style::fg(&parent, 240)));
             }
         }
-        if files.is_empty() && dirs.is_empty() {
+        if items.is_empty() {
             lines.push(style::fg("No recent files or directories", 245));
-        } else {
-            lines.push(String::new());
-            lines.push(style::fg("f/d to toggle, number to jump, other key to close", 240));
+            self.show_in_right(&lines.join("\n"));
+            let _ = Input::getchr(None);
+            return;
         }
+        lines.push(String::new());
+        lines.push(style::fg("Number (1-9) to jump, ENTER to type a number, ESC to close", 240));
         self.show_in_right(&lines.join("\n"));
 
-        // Wait for input: number to jump, f/d to toggle, anything else to close
-        let mut showing_dirs = false;
-        loop {
-            let Some(key) = Input::getchr(None) else { break };
-            match key.as_str() {
-                "ESC" | "C-R" => break,
-                "f" => {
-                    showing_dirs = false;
-                    // Re-render with files highlighted
-                    self.show_in_right(&lines.join("\n"));
-                    continue;
-                }
-                "d" => {
-                    showing_dirs = true;
-                    self.show_in_right(&lines.join("\n"));
-                    continue;
-                }
-                k if k.len() == 1 && k.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) => {
-                    let n: usize = k.parse().unwrap_or(0);
-                    if n == 0 { break; }
-                    let idx = n - 1;
-                    if showing_dirs {
-                        if let Some(d) = dirs.get(idx) {
-                            let target = std::path::PathBuf::from(d);
-                            if target.is_dir() {
-                                self.save_dir_index();
-                                self.rotate_mark_history();
-                                let _ = std::env::set_current_dir(&target);
-                                self.index = 0;
-                                self.scroll_ix = 0;
-                                self.prev_selected = None;
-                                self.load_dir();
-                            }
-                        }
-                    } else if let Some(f) = files.get(idx) {
-                        let target = std::path::PathBuf::from(f);
-                        if let Some(parent) = target.parent() {
-                            if parent.is_dir() {
-                                self.save_dir_index();
-                                self.rotate_mark_history();
-                                let _ = std::env::set_current_dir(parent);
-                                self.index = 0;
-                                self.scroll_ix = 0;
-                                self.prev_selected = None;
-                                self.load_dir();
-                                let name = target.file_name().map(|n| n.to_string_lossy().to_string());
-                                if let Some(name) = name {
-                                    if let Some(pos) = self.files.iter().position(|e| e.name == name) {
-                                        self.index = pos;
-                                    }
-                                }
-                            }
+        // Block for input: digit, ENTER, or exit.
+        let Some(key) = Input::getchr(None) else { return };
+        let picked_idx: Option<usize> = match key.as_str() {
+            "ESC" | "C-R" => None,
+            "ENTER" => {
+                let typed = self.prompt("Jump to #: ", "");
+                typed.parse::<usize>().ok().filter(|n| *n >= 1 && *n <= items.len()).map(|n| n - 1)
+            }
+            k if k.len() == 1 && k.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) => {
+                let n: usize = k.parse().unwrap_or(0);
+                if n >= 1 && n <= items.len() { Some(n - 1) } else { None }
+            }
+            _ => None,
+        };
+
+        let Some(idx) = picked_idx else { return };
+        let (kind, path) = items[idx];
+        let target_path = path.to_string();
+        drop(items);
+
+        if kind == "dir" {
+            let target = std::path::PathBuf::from(&target_path);
+            if target.is_dir() {
+                self.save_dir_index();
+                self.rotate_mark_history();
+                let _ = std::env::set_current_dir(&target);
+                self.index = 0;
+                self.scroll_ix = 0;
+                self.prev_selected = None;
+                self.load_dir();
+            }
+        } else {
+            let target = std::path::PathBuf::from(&target_path);
+            if let Some(parent) = target.parent() {
+                if parent.is_dir() {
+                    self.save_dir_index();
+                    self.rotate_mark_history();
+                    let _ = std::env::set_current_dir(parent);
+                    self.index = 0;
+                    self.scroll_ix = 0;
+                    self.prev_selected = None;
+                    self.load_dir();
+                    if let Some(name) = target.file_name().map(|n| n.to_string_lossy().to_string()) {
+                        if let Some(pos) = self.files.iter().position(|e| e.name == name) {
+                            self.index = pos;
                         }
                     }
-                    break;
                 }
-                _ => break,
             }
         }
     }

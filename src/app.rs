@@ -52,6 +52,7 @@ pub struct App {
     pub file_op: Arc<Mutex<FileOpState>>,
     pub file_op_thread: Option<std::thread::JoinHandle<()>>,
     pub pick_output: Option<String>,
+    pub fresh: bool,
     pub locate_active: bool,
     pub ssh_state: Option<crate::ssh::SshState>,
     pub preview_cache: crate::preview::PreviewCache,
@@ -61,7 +62,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(fresh: bool) -> Self {
         let config = Config::load();
         crate::highlight::set_theme(&config.syntax_theme);
         let state = State::load();
@@ -111,6 +112,7 @@ impl App {
             })),
             file_op_thread: None,
             pick_output: None,
+            fresh,
             locate_active: false,
             ssh_state: None,
             preview_cache: crate::preview::new_cache(),
@@ -121,10 +123,12 @@ impl App {
 
         app.rebuild_panes();
 
-        // Restore last dir index
-        let cwd = env::current_dir().unwrap_or_default();
-        if let Some(&idx) = app.state.dir_index.get(&cwd.to_string_lossy().to_string()) {
-            app.index = idx;
+        // Restore last dir index (unless --fresh or remember_positions=false)
+        if !app.fresh && app.config.remember_positions {
+            let cwd = env::current_dir().unwrap_or_default();
+            if let Some(&idx) = app.state.dir_index.get(&cwd.to_string_lossy().to_string()) {
+                app.index = idx;
+            }
         }
 
         app.load_dir();
@@ -529,9 +533,11 @@ impl App {
             self.index = 0;
             self.scroll_ix = 0;
             self.prev_selected = None;
-            let cwd = env::current_dir().unwrap_or_default();
-            if let Some(&idx) = self.state.dir_index.get(&cwd.to_string_lossy().to_string()) {
-                self.index = idx;
+            if !self.fresh && self.config.remember_positions {
+                let cwd = env::current_dir().unwrap_or_default();
+                if let Some(&idx) = self.state.dir_index.get(&cwd.to_string_lossy().to_string()) {
+                    self.index = idx;
+                }
             }
             self.load_dir();
         } else {
@@ -686,6 +692,8 @@ impl App {
     // --- State ---
 
     pub fn save_dir_index(&mut self) {
+        // --fresh or config opt-out: don't persist cursor positions.
+        if self.fresh || !self.config.remember_positions { return; }
         let cwd = env::current_dir().unwrap_or_default();
         self.state.dir_index.insert(cwd.to_string_lossy().to_string(), self.index);
         // Cap at 200 entries to prevent unbounded state file growth
@@ -761,6 +769,8 @@ impl App {
                 if self.sort_invert { style::fg("on", 35) } else { style::fg("off", 196) }));
             lines.push(format!("  {} Trash:        {}", style::fg("x", 220),
                 if self.config.trash { style::fg("on", 35) } else { style::fg("off", 196) }));
+            lines.push(format!("  {} Remember dir: {}", style::fg("r", 220),
+                if self.config.remember_positions { style::fg("on", 35) } else { style::fg("off", 196) }));
             lines.push(String::new());
             lines.push(format!("  {}", style::fg(&"-".repeat(sep_w), 238)));
             lines.push(format!("  {} Top fg:       {:>3} {}", style::fg("1", 220), self.config.c_top_fg, style::fg("\u{2588}\u{2588}\u{2588}", self.config.c_top_fg as u8)));
@@ -845,6 +855,9 @@ impl App {
                 }
                 "x" => {
                     self.config.trash = !self.config.trash;
+                }
+                "r" => {
+                    self.config.remember_positions = !self.config.remember_positions;
                 }
                 "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => {
                     let (label, current) = match key.as_str() {

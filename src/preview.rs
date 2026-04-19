@@ -117,10 +117,66 @@ fn preview_file(path: &Path, max_lines: usize, use_bat: bool) -> String {
         }
     }
 
-    // Markdown via pandoc
-    if ext_lower == "md" {
-        if let Some(s) = run_preview_cmd("pandoc", &[path.as_os_str().to_str().unwrap_or(""), "-t", "plain"]) {
-            return s;
+    // Markdown: dedicated highlighter (headers, bold, italic, code, links, lists).
+    if ext_lower == "md" || ext_lower == "markdown" {
+        if let Ok(meta) = fs::metadata(path) {
+            if meta.len() > LARGE_FILE_PREVIEW_LIMIT {
+                return format!("{}\n\n{}\nSize: {}",
+                    style::bold(&path.file_name().unwrap_or_default().to_string_lossy()),
+                    style::fg("[File too large for preview]", 245),
+                    format_size(meta.len()));
+            }
+        }
+        if use_bat {
+            if let Some(highlighted) = bat_preview(path, max_lines) {
+                return highlighted;
+            }
+        }
+        if let Ok(bytes) = fs::read(path) {
+            let content = String::from_utf8_lossy(&bytes);
+            return highlight::highlight_markdown(&content, max_lines);
+        }
+    }
+
+    // LaTeX/TeX: dedicated highlighter (commands, envs, comments, math).
+    if matches!(ext_lower.as_str(), "tex" | "latex" | "ltx" | "sty" | "cls" | "bib") {
+        if let Ok(meta) = fs::metadata(path) {
+            if meta.len() > LARGE_FILE_PREVIEW_LIMIT {
+                return format!("{}\n\n{}\nSize: {}",
+                    style::bold(&path.file_name().unwrap_or_default().to_string_lossy()),
+                    style::fg("[File too large for preview]", 245),
+                    format_size(meta.len()));
+            }
+        }
+        if use_bat {
+            if let Some(highlighted) = bat_preview(path, max_lines) {
+                return highlighted;
+            }
+        }
+        if let Ok(bytes) = fs::read(path) {
+            let content = String::from_utf8_lossy(&bytes);
+            return highlight::highlight_tex(&content, max_lines);
+        }
+    }
+
+    // Plain text (.txt, .log): URL/email/TODO highlighting.
+    if matches!(ext_lower.as_str(), "txt" | "log" | "readme") {
+        if let Ok(meta) = fs::metadata(path) {
+            if meta.len() > LARGE_FILE_PREVIEW_LIMIT {
+                return format!("{}\n\n{}\nSize: {}",
+                    style::bold(&path.file_name().unwrap_or_default().to_string_lossy()),
+                    style::fg("[File too large for preview]", 245),
+                    format_size(meta.len()));
+            }
+        }
+        if use_bat {
+            if let Some(highlighted) = bat_preview(path, max_lines) {
+                return highlighted;
+            }
+        }
+        if let Ok(bytes) = fs::read(path) {
+            let content = String::from_utf8_lossy(&bytes);
+            return highlight::highlight_text(&content, max_lines);
         }
     }
 
@@ -448,7 +504,8 @@ pub fn is_text_ext(ext: &str) -> bool {
         "r" | "sql" | "diff" | "patch" | "zig" | "nim" | "el" | "lisp" |
         "clj" | "ex" | "exs" | "erl" | "hs" | "ml" | "mli" | "swift" |
         "kt" | "kts" | "scala" | "v" | "sv" | "vhd" | "tcl" | "rkt" |
-        "xrpn" | ""
+        "xrpn" | "tex" | "latex" | "ltx" | "sty" | "cls" | "bib" |
+        "markdown" | "readme" | ""
     )
 }
 

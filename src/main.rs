@@ -22,12 +22,15 @@ use crust::{Crust, Input};
 fn main() {
     config::ensure_dirs();
 
-    // Parse --pick argument
+    // Parse --pick argument and --fresh flag
     let mut pick_output = None;
     let mut start_dir = None;
+    let mut fresh = false;
     for arg in std::env::args().skip(1) {
         if arg.starts_with("--pick=") {
             pick_output = Some(arg[7..].to_string());
+        } else if arg == "--fresh" {
+            fresh = true;
         } else if !arg.starts_with('-') {
             start_dir = Some(arg);
         }
@@ -38,7 +41,7 @@ fn main() {
 
     Crust::init();
 
-    let mut app = app::App::new();
+    let mut app = app::App::new(fresh);
     app.pick_output = pick_output;
     app.render();
 

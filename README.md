@@ -27,6 +27,9 @@ pointer ~/Documents
 
 # Use as file picker
 pointer --pick=/tmp/selected.txt
+
+# Start with a clean slate (don't restore cursor positions)
+pointer --fresh
 ```
 
 Press `?` for built-in help. Press `q` to quit (saves state).
@@ -47,7 +50,7 @@ Press `?` for built-in help. Press `q` to quit (saves state).
 
 - **Two-pane layout** with configurable width ratio and border styles
 - **LS_COLORS support** for consistent terminal theming
-- **Syntax highlighting** built-in (20+ languages) with 6 themes, bat as optional toggle
+- **Syntax highlighting** built-in (20+ languages, plus dedicated Markdown/LaTeX/plaintext renderers with URL/TODO detection) with 6 themes, bat as optional toggle
 - **Image preview** via kitty/sixel/w3m protocols (using glow)
 - **Archive browsing** (zip, tar, gz, bz2, xz, rar, 7z as virtual directories)
 - **SSH/SFTP remote browsing** (Ctrl-E)
@@ -148,9 +151,12 @@ Plugins: `~/.pointer/plugins/`
   "topmatch": [["PassionFruit", 171], ["Dualog", 72], ["", 249]],
   "ai_key": "",
   "ai_model": "gpt-4o-mini",
-  "syntax_theme": "monokai"
+  "syntax_theme": "monokai",
+  "remember_positions": true
 }
 ```
+
+`remember_positions` (default `true`) persists the cursor position per directory across sessions. Toggle at runtime with `r` in the `C` config screen, or launch with `pointer --fresh` to bypass restoration for a single session.
 
 ### Script Evaluator (@)
 

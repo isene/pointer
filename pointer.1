@@ -1,0 +1,100 @@
+.TH POINTER 1 "April 2026" "pointer" "User Commands"
+.SH NAME
+pointer \- terminal file manager
+.SH SYNOPSIS
+.B pointer
+[\fB\-\-fresh\fR]
+[\fB\-\-pick=\fIFILE\fR]
+[\fIDIR\fR]
+.SH DESCRIPTION
+.B pointer
+is a two-pane terminal file manager with preview, image display, archive
+browsing, SSH/SFTP, tabs, bookmarks, plugins, and a comprehensive undo stack.
+Built on Crust. Feature clone of RTFM.
+.SH OPTIONS
+.TP
+.BI \-\-pick= FILE
+File picker mode. On quit, writes the tagged items (one per line) to
+.IR FILE .
+Used by external tools (such as Kastrup's attach-file flow) to let the user
+choose paths interactively.
+.TP
+.B \-\-fresh
+Don't restore cursor positions from previous sessions, and don't save
+positions for this session. Config option
+.B remember_positions
+controls the default behavior.
+.TP
+.I DIR
+Start in \fIDIR\fR instead of the current directory.
+.SH KEY BINDINGS
+Press
+.B ?
+inside the application for the complete reference. Common keys:
+.TP
+.B j / k, UP / DOWN
+Move selection.
+.TP
+.B h / l, LEFT / RIGHT
+Parent / enter directory.
+.TP
+.B SPACE, t
+Tag item. Tagged items are the target of bulk operations.
+.TP
+.B d
+Delete (moves to trash if trash is enabled, otherwise permanent).
+.TP
+.B c
+Rename.
+.TP
+.B r
+Open recent files / directories picker.
+.TP
+.B C
+Configuration menu (inside, press
+.B r
+to toggle position memory).
+.TP
+.B q
+Quit and save state.
+.TP
+.B Q
+Quit without saving state.
+.SH PREVIEW
+.B pointer
+previews text with syntax highlighting (20+ languages), Markdown, LaTeX,
+plain text with URL/email/TODO detection, images via kitty/sixel protocols,
+archives as virtual directories, PDF, LibreOffice / MS Office documents,
+audio/video metadata, and JSON/XML.
+.SH FILES
+.TP
+.I ~/.pointer/conf.json
+User configuration (auto-created on first run). Option
+.B remember_positions
+(bool, default true) controls persistent cursor positions.
+.TP
+.I ~/.pointer/state.json
+Persistent state: marks, history, recent files, cursor positions per
+directory.
+.TP
+.I ~/.pointer/trash/
+Trash directory (when trash is enabled).
+.TP
+.I ~/.pointer/plugins/
+Plugin manifests. Each plugin is a JSON file bound to a key.
+.SH ENVIRONMENT
+.TP
+.B EDITOR
+Editor used by the script evaluator and file-open actions.
+.TP
+.B LS_COLORS
+Consulted for file color coding (falls back to a built-in palette).
+.SH AUTHOR
+Geir Isene <g@isene.com>
+.SH SEE ALSO
+.BR rush (1),
+.BR kastrup (1),
+.BR scroll (1),
+.BR tock (1)
+.PP
+Project home: https://github.com/isene/pointer

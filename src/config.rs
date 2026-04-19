@@ -69,6 +69,8 @@ pub struct Config {
     pub ai_model: String,
     #[serde(default = "default_syntax_theme")]
     pub syntax_theme: String,
+    #[serde(default = "default_true")]
+    pub remember_positions: bool,
 }
 
 fn default_syntax_theme() -> String { "monokai".into() }
@@ -120,6 +122,7 @@ impl Default for Config {
             ai_key: String::new(),
             ai_model: default_ai_model(),
             syntax_theme: default_syntax_theme(),
+            remember_positions: true,
         }
     }
 }

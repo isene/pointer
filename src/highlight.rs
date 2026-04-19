@@ -725,3 +725,400 @@ fn plain_with_limit(text: &str, max_lines: usize) -> String {
     }
     result
 }
+
+// Shared inline color helpers for markdown/text highlighters
+const MD_H1: u8 = 51;        // bright cyan
+const MD_H2: u8 = 117;       // cyan
+const MD_H3: u8 = 220;       // yellow
+const MD_H_OTHER: u8 = 165;  // magenta
+const MD_BOLD: u8 = 255;     // bright white
+const MD_CODE: u8 = 78;      // green
+const MD_LINK_TEXT: u8 = 81; // bright blue
+const MD_LINK_URL: u8 = 245; // dim
+const MD_QUOTE: u8 = 245;    // dim
+const MD_BULLET: u8 = 220;   // yellow
+const MD_RULE: u8 = 240;     // dim
+const MD_HTML: u8 = 108;     // muted green for html tags
+
+const TEX_CMD: u8 = 51;      // bright cyan
+const TEX_ENV: u8 = 117;     // cyan (bold at callsite)
+const TEX_COMMENT: u8 = 245; // dim
+const TEX_MATH: u8 = 228;    // bright yellow
+const TEX_MATH_DELIM: u8 = 220; // yellow
+const TEX_BRACE: u8 = 248;   // light gray
+const TEX_OPT: u8 = 176;     // mauve (optional args)
+
+const TXT_URL: u8 = 81;      // bright blue
+const TXT_EMAIL: u8 = 78;    // green
+const TXT_TODO: u8 = 208;    // orange
+
+/// Markdown highlighter: headers, bold, italic, inline/fenced code, links,
+/// blockquotes, lists, horizontal rules.
+pub fn highlight_markdown(text: &str, max_lines: usize) -> String {
+    let mut out = String::with_capacity(text.len() * 2);
+    let mut in_fence = false;
+    let mut fence_marker = String::new();
+    let mut count = 0;
+
+    for line in text.lines() {
+        if count >= max_lines {
+            out.push_str(&style::fg("\n...", MD_RULE));
+            break;
+        }
+        if count > 0 { out.push('\n'); }
+        count += 1;
+
+        let trimmed = line.trim_start();
+
+        // Fenced code block detection
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            let marker = &trimmed[..3];
+            if in_fence {
+                if fence_marker == marker {
+                    in_fence = false;
+                    fence_marker.clear();
+                }
+            } else {
+                in_fence = true;
+                fence_marker = marker.to_string();
+            }
+            out.push_str(&style::fg(line, MD_CODE));
+            continue;
+        }
+        if in_fence {
+            out.push_str(&style::fg(line, MD_CODE));
+            continue;
+        }
+
+        // Horizontal rule
+        let no_ws: String = trimmed.chars().filter(|c| !c.is_whitespace()).collect();
+        if no_ws.len() >= 3
+            && (no_ws.chars().all(|c| c == '-')
+                || no_ws.chars().all(|c| c == '*')
+                || no_ws.chars().all(|c| c == '_'))
+        {
+            out.push_str(&style::fg(line, MD_RULE));
+            continue;
+        }
+
+        // Headers
+        if let Some(rest) = trimmed.strip_prefix("###### ") {
+            out.push_str(&style::bold(&style::fg(&format!("###### {}", rest), MD_H_OTHER)));
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("##### ") {
+            out.push_str(&style::bold(&style::fg(&format!("##### {}", rest), MD_H_OTHER)));
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("#### ") {
+            out.push_str(&style::bold(&style::fg(&format!("#### {}", rest), MD_H_OTHER)));
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("### ") {
+            out.push_str(&style::bold(&style::fg(&format!("### {}", rest), MD_H3)));
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("## ") {
+            out.push_str(&style::bold(&style::fg(&format!("## {}", rest), MD_H2)));
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("# ") {
+            out.push_str(&style::bold(&style::fg(&format!("# {}", rest), MD_H1)));
+            continue;
+        }
+
+        // Blockquote
+        if trimmed.starts_with('>') {
+            out.push_str(&style::italic(&style::fg(line, MD_QUOTE)));
+            continue;
+        }
+
+        // Reproduce leading whitespace before styled content
+        let lead_ws = &line[..line.len() - trimmed.len()];
+        out.push_str(lead_ws);
+
+        // List item marker
+        let (marker_end, rest_after_marker) = detect_list_marker(trimmed);
+        if marker_end > 0 {
+            out.push_str(&style::bold(&style::fg(&trimmed[..marker_end], MD_BULLET)));
+            inline_md(rest_after_marker, &mut out);
+            continue;
+        }
+
+        inline_md(trimmed, &mut out);
+    }
+
+    out
+}
+
+/// Return (bytes_consumed_by_marker, remainder) if trimmed starts with a list
+/// marker ("- ", "* ", "+ ", or "N. "), else (0, trimmed).
+fn detect_list_marker(trimmed: &str) -> (usize, &str) {
+    let bytes = trimmed.as_bytes();
+    if bytes.len() >= 2 {
+        let c = bytes[0];
+        if (c == b'-' || c == b'*' || c == b'+') && bytes[1] == b' ' {
+            return (2, &trimmed[2..]);
+        }
+    }
+    // Ordered list "123. "
+    let mut i = 0;
+    while i < bytes.len() && bytes[i].is_ascii_digit() { i += 1; }
+    if i > 0 && i + 1 < bytes.len() && bytes[i] == b'.' && bytes[i + 1] == b' ' {
+        return (i + 2, &trimmed[i + 2..]);
+    }
+    (0, trimmed)
+}
+
+/// Inline markdown: **bold**, *italic* or _italic_, `code`, [text](url),
+/// autolinks <url>, HTML tags.
+fn inline_md(line: &str, out: &mut String) {
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        // Inline code `...`
+        if chars[i] == '`' {
+            if let Some(end) = chars[i + 1..].iter().position(|&c| c == '`') {
+                let content: String = chars[i..=i + 1 + end].iter().collect();
+                out.push_str(&style::fg(&content, MD_CODE));
+                i += 2 + end;
+                continue;
+            }
+        }
+        // Bold **...**
+        if i + 1 < chars.len() && chars[i] == '*' && chars[i + 1] == '*' {
+            let rest: String = chars[i + 2..].iter().collect();
+            if let Some(end) = rest.find("**") {
+                let content: String = chars[i + 2..i + 2 + end].iter().collect();
+                out.push_str(&style::bold(&style::fg(&content, MD_BOLD)));
+                i += 4 + end;
+                continue;
+            }
+        }
+        // Italic *...* (single) or _..._
+        if chars[i] == '*' || chars[i] == '_' {
+            let delim = chars[i];
+            if i + 1 < chars.len() && chars[i + 1] != delim && chars[i + 1] != ' ' {
+                if let Some(end) = chars[i + 1..].iter().position(|&c| c == delim) {
+                    let content: String = chars[i + 1..i + 1 + end].iter().collect();
+                    if !content.contains('\n') && !content.is_empty() {
+                        out.push_str(&style::italic(&content));
+                        i += 2 + end;
+                        continue;
+                    }
+                }
+            }
+        }
+        // Markdown link [text](url)
+        if chars[i] == '[' {
+            if let Some(close_txt) = chars[i + 1..].iter().position(|&c| c == ']') {
+                let after = i + 1 + close_txt + 1;
+                if after < chars.len() && chars[after] == '(' {
+                    if let Some(close_url) = chars[after + 1..].iter().position(|&c| c == ')') {
+                        let text: String = chars[i + 1..i + 1 + close_txt].iter().collect();
+                        let url: String = chars[after + 1..after + 1 + close_url].iter().collect();
+                        out.push_str(&style::underline(&style::fg(&text, MD_LINK_TEXT)));
+                        out.push_str(&style::fg(&format!("({})", url), MD_LINK_URL));
+                        i = after + 1 + close_url + 1;
+                        continue;
+                    }
+                }
+            }
+        }
+        // Autolink <http://...> or HTML tag
+        if chars[i] == '<' {
+            if let Some(close) = chars[i + 1..].iter().position(|&c| c == '>') {
+                let content: String = chars[i + 1..i + 1 + close].iter().collect();
+                let seq: String = chars[i..=i + 1 + close].iter().collect();
+                if content.starts_with("http://") || content.starts_with("https://") {
+                    out.push_str(&style::underline(&style::fg(&seq, MD_LINK_TEXT)));
+                } else {
+                    out.push_str(&style::fg(&seq, MD_HTML));
+                }
+                i += 2 + close;
+                continue;
+            }
+        }
+        out.push(chars[i]);
+        i += 1;
+    }
+}
+
+/// LaTeX/TeX highlighter: commands, environments, comments, math, braces.
+pub fn highlight_tex(text: &str, max_lines: usize) -> String {
+    let mut out = String::with_capacity(text.len() * 2);
+    let mut count = 0;
+    let mut in_math_block = false;
+
+    for line in text.lines() {
+        if count >= max_lines {
+            out.push_str(&style::fg("\n...", TEX_COMMENT));
+            break;
+        }
+        if count > 0 { out.push('\n'); }
+        count += 1;
+
+        highlight_tex_line(line, &mut out, &mut in_math_block);
+    }
+    out
+}
+
+fn highlight_tex_line(line: &str, out: &mut String, in_math_block: &mut bool) {
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        // Line comment %
+        if chars[i] == '%' && (i == 0 || chars[i - 1] != '\\') {
+            let rest: String = chars[i..].iter().collect();
+            out.push_str(&style::fg(&rest, TEX_COMMENT));
+            return;
+        }
+        // Display math $$...$$
+        if i + 1 < chars.len() && chars[i] == '$' && chars[i + 1] == '$' {
+            *in_math_block = !*in_math_block;
+            out.push_str(&style::fg("$$", TEX_MATH_DELIM));
+            i += 2;
+            continue;
+        }
+        // Inline math $...$
+        if chars[i] == '$' && (i == 0 || chars[i - 1] != '\\') {
+            if let Some(end) = chars[i + 1..].iter().position(|&c| c == '$') {
+                let content: String = chars[i + 1..i + 1 + end].iter().collect();
+                out.push_str(&style::fg("$", TEX_MATH_DELIM));
+                out.push_str(&style::fg(&content, TEX_MATH));
+                out.push_str(&style::fg("$", TEX_MATH_DELIM));
+                i += 2 + end;
+                continue;
+            }
+        }
+        if *in_math_block {
+            out.push_str(&style::fg(&chars[i].to_string(), TEX_MATH));
+            i += 1;
+            continue;
+        }
+        // Commands \foo, including \begin{env}, \end{env}
+        if chars[i] == '\\' && i + 1 < chars.len() {
+            let start = i;
+            i += 1;
+            // \ followed by single non-letter punct is itself a command (e.g. \\, \&, \$)
+            if !chars[i].is_ascii_alphabetic() {
+                let cmd: String = chars[start..=i].iter().collect();
+                out.push_str(&style::fg(&cmd, TEX_CMD));
+                i += 1;
+                continue;
+            }
+            while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '*') {
+                i += 1;
+            }
+            let cmd: String = chars[start..i].iter().collect();
+            let is_env = cmd == "\\begin" || cmd == "\\end";
+            if is_env {
+                out.push_str(&style::bold(&style::fg(&cmd, TEX_ENV)));
+                // Consume {env} with env name in bold
+                if i < chars.len() && chars[i] == '{' {
+                    if let Some(close) = chars[i + 1..].iter().position(|&c| c == '}') {
+                        out.push_str(&style::fg("{", TEX_BRACE));
+                        let env: String = chars[i + 1..i + 1 + close].iter().collect();
+                        out.push_str(&style::bold(&style::fg(&env, TEX_ENV)));
+                        out.push_str(&style::fg("}", TEX_BRACE));
+                        i = i + 1 + close + 1;
+                        continue;
+                    }
+                }
+            } else {
+                out.push_str(&style::fg(&cmd, TEX_CMD));
+                // Optional args [...]
+                if i < chars.len() && chars[i] == '[' {
+                    if let Some(close) = chars[i + 1..].iter().position(|&c| c == ']') {
+                        let opt: String = chars[i..=i + 1 + close].iter().collect();
+                        out.push_str(&style::fg(&opt, TEX_OPT));
+                        i = i + 1 + close + 1;
+                        continue;
+                    }
+                }
+            }
+            continue;
+        }
+        // Braces
+        if chars[i] == '{' || chars[i] == '}' {
+            out.push_str(&style::fg(&chars[i].to_string(), TEX_BRACE));
+            i += 1;
+            continue;
+        }
+        out.push(chars[i]);
+        i += 1;
+    }
+}
+
+/// Plain text highlighter: URLs, emails, TODO/FIXME/NOTE markers.
+pub fn highlight_text(text: &str, max_lines: usize) -> String {
+    let mut out = String::with_capacity(text.len() * 2);
+    let mut count = 0;
+    for line in text.lines() {
+        if count >= max_lines {
+            out.push_str(&style::fg("\n...", MD_RULE));
+            break;
+        }
+        if count > 0 { out.push('\n'); }
+        count += 1;
+        highlight_text_line(line, &mut out);
+    }
+    out
+}
+
+fn highlight_text_line(line: &str, out: &mut String) {
+    // Tokenize on whitespace to find URLs/emails, then scan each word for TODO etc.
+    let mut last = 0;
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    while i < len {
+        // Skip whitespace
+        while i < len && (bytes[i] as char).is_whitespace() { i += 1; }
+        let start = i;
+        while i < len && !(bytes[i] as char).is_whitespace() { i += 1; }
+        if start == i { break; }
+        let word = &line[start..i];
+        // Flush prior segment
+        out.push_str(&line[last..start]);
+        last = i;
+
+        if word.starts_with("http://") || word.starts_with("https://") || word.starts_with("ftp://") {
+            // Trim common trailing punctuation from the url portion
+            let (url, tail) = split_url_tail(word);
+            out.push_str(&style::underline(&style::fg(url, TXT_URL)));
+            out.push_str(tail);
+            continue;
+        }
+        if is_email_like(word) {
+            out.push_str(&style::fg(word, TXT_EMAIL));
+            continue;
+        }
+        // TODO/FIXME/NOTE/HACK/XXX
+        let core = word.trim_end_matches(|c: char| c == ':' || c == ',' || c == '.' || c == '!');
+        if matches!(core, "TODO" | "FIXME" | "NOTE" | "HACK" | "XXX" | "BUG" | "WARN") {
+            out.push_str(&style::bold(&style::fg(word, TXT_TODO)));
+            continue;
+        }
+        out.push_str(word);
+    }
+    out.push_str(&line[last..]);
+}
+
+fn split_url_tail(s: &str) -> (&str, &str) {
+    let cut = s.trim_end_matches(|c: char|
+        matches!(c, '.' | ',' | ';' | ':' | ')' | ']' | '>' | '!' | '?' | '"' | '\'')).len();
+    (&s[..cut], &s[cut..])
+}
+
+fn is_email_like(word: &str) -> bool {
+    let core = word.trim_start_matches(|c: char| !c.is_alphanumeric())
+        .trim_end_matches(|c: char| !c.is_alphanumeric());
+    if let Some(at) = core.find('@') {
+        let (user, domain) = core.split_at(at);
+        let domain = &domain[1..];
+        !user.is_empty() && domain.contains('.') && !domain.starts_with('.')
+    } else {
+        false
+    }
+}
