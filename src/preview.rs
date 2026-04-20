@@ -516,6 +516,13 @@ pub fn is_image_ext(ext: &str) -> bool {
     )
 }
 
+pub fn is_video_ext(ext: &str) -> bool {
+    matches!(ext.to_lowercase().as_str(),
+        "mp4" | "mkv" | "avi" | "mov" | "webm" | "mpg" | "mpeg" |
+        "flv" | "wmv" | "m4v" | "ogv" | "3gp" | "3g2"
+    )
+}
+
 pub fn is_archive_ext(ext: &str) -> bool {
     matches!(ext.to_lowercase().as_str(),
         "zip" | "tar" | "gz" | "tgz" | "bz2" | "tbz2" | "xz" | "txz" |

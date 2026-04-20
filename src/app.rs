@@ -596,7 +596,11 @@ impl App {
 
     pub fn open_file(&mut self, path: &PathBuf) {
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-        if preview::is_text_ext(ext) {
+        // Known text extension, image, archive, or content-sniffed text:
+        // fall back to $EDITOR like RTFM does. xdg-open is only for files
+        // that look binary and aren't images/archives.
+        let use_editor = preview::is_text_ext(ext) || looks_like_text(path);
+        if use_editor {
             let editor = env::var("EDITOR").unwrap_or_else(|_| "vim".into());
             self.run_interactive(&format!("{} {:?}", editor, path));
             return;
@@ -1097,6 +1101,34 @@ impl App {
 
 // --- Helpers ---
 
+
+/// Content-sniff a file to decide if $EDITOR is a sensible opener.
+/// Reads the first 512 bytes and considers it text unless it contains a
+/// NUL byte (classic binary marker) or is an image/archive by extension.
+fn looks_like_text(path: &std::path::Path) -> bool {
+    use std::io::Read;
+    let ext = path.extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_lowercase())
+        .unwrap_or_default();
+    if preview::is_image_ext(&ext) || preview::is_archive_ext(&ext) {
+        return false;
+    }
+    // Binary formats that have their own tools.
+    if matches!(ext.as_str(),
+        "pdf" | "djvu" | "epub" | "mobi" |
+        "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" |
+        "odt" | "odp" | "ods" | "odg" |
+        "mp3" | "mp4" | "mkv" | "webm" | "avi" | "mov" | "ogg" | "wav" | "flac" |
+        "iso" | "img" | "exe" | "dll" | "so" | "dylib" | "class"
+    ) { return false; }
+
+    let Ok(mut f) = std::fs::File::open(path) else { return false };
+    let mut buf = [0u8; 512];
+    let n = f.read(&mut buf).unwrap_or(0);
+    if n == 0 { return true; } // empty file: treat as text
+    !buf[..n].contains(&0u8)
+}
 
 fn visible_height(pane: &Pane) -> usize {
     // Border is drawn outside the pane, so content height is always h
