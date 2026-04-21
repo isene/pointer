@@ -194,6 +194,13 @@ impl App {
 
     /// Reload directory listing, preserving selection by name
     pub fn reload_and_render(&mut self) {
+        // When inside an archive (virtual file tree), don't touch the
+        // on-disk listing - it would replace the archive entries with the
+        // surrounding directory, kicking us out of archive mode.
+        if self.is_archive_mode() {
+            self.render();
+            return;
+        }
         let prev_name = self.files.get(self.index).map(|e| e.name.clone());
         self.load_dir();
         if let Some(name) = prev_name {
@@ -596,6 +603,12 @@ impl App {
 
     pub fn open_file(&mut self, path: &PathBuf) {
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        // HyperList files: open in `hyper` if available, else fall through
+        // to the regular text-editor path.
+        if ext.eq_ignore_ascii_case("hl") && which_exists("hyper") {
+            self.run_interactive(&format!("hyper {:?}", path));
+            return;
+        }
         // Known text extension, image, archive, or content-sniffed text:
         // fall back to $EDITOR like RTFM does. xdg-open is only for files
         // that look binary and aren't images/archives.
@@ -1101,6 +1114,20 @@ impl App {
 
 // --- Helpers ---
 
+
+/// Return true if `name` is an executable on $PATH.
+fn which_exists(name: &str) -> bool {
+    let Ok(path) = std::env::var("PATH") else { return false };
+    for dir in path.split(':') {
+        if dir.is_empty() { continue; }
+        let candidate = std::path::Path::new(dir).join(name);
+        if candidate.exists() {
+            // We only need it callable; let `run_interactive` discover perms.
+            return true;
+        }
+    }
+    false
+}
 
 /// Content-sniff a file to decide if $EDITOR is a sensible opener.
 /// Reads the first 512 bytes and considers it text unless it contains a
