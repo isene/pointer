@@ -603,12 +603,16 @@ impl App {
 
     pub fn open_file(&mut self, path: &PathBuf) {
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-        // HyperList files: open in `hyper` if available, else fall through
-        // to the regular text-editor path.
-        if ext.eq_ignore_ascii_case("hl") && which_exists("hyper") {
-            self.run_interactive(&format!("hyper {:?}", path));
+
+        // If the system default opener for this file is one of the user's
+        // configured full-TUI programs (config.interactive), give it terminal
+        // control. This keeps external-program references configurable —
+        // no extension hardcoding. Same idea as RTFM's get_interactive_program.
+        if let Some(prog) = self.resolve_interactive_launcher(path) {
+            self.run_interactive(&format!("{} {:?}", prog, path));
             return;
         }
+
         // Known text extension, image, archive, or content-sniffed text:
         // fall back to $EDITOR like RTFM does. xdg-open is only for files
         // that look binary and aren't images/archives.
@@ -624,6 +628,52 @@ impl App {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn();
+    }
+
+    /// Query xdg-mime for the default desktop file for `path`, then parse its
+    /// Exec= line. Returns the launcher basename when it's in
+    /// `config.interactive`, otherwise None.
+    fn resolve_interactive_launcher(&self, path: &PathBuf) -> Option<String> {
+        let mimetype = std::process::Command::new("xdg-mime")
+            .args(["query", "filetype"])
+            .arg(path)
+            .output().ok()?;
+        if !mimetype.status.success() { return None; }
+        let mt = String::from_utf8_lossy(&mimetype.stdout).trim().to_string();
+        if mt.is_empty() { return None; }
+
+        let desktop = std::process::Command::new("xdg-mime")
+            .args(["query", "default", &mt])
+            .output().ok()?;
+        if !desktop.status.success() { return None; }
+        let dt = String::from_utf8_lossy(&desktop.stdout).trim().to_string();
+        if dt.is_empty() { return None; }
+
+        let mut desktop_path: Option<PathBuf> = None;
+        let home = env::var("HOME").unwrap_or_default();
+        for dir in [
+            "/usr/share/applications",
+            "/usr/local/share/applications",
+            &format!("{}/.local/share/applications", home)[..],
+        ] {
+            let p = std::path::Path::new(dir).join(&dt);
+            if p.exists() { desktop_path = Some(p); break; }
+        }
+        let dp = desktop_path?;
+        let content = std::fs::read_to_string(&dp).ok()?;
+        let exec_line = content.lines()
+            .find(|l| l.starts_with("Exec="))?
+            .trim_start_matches("Exec=");
+        let prog = exec_line.split_whitespace().next()?;
+        let basename = std::path::Path::new(prog)
+            .file_name()
+            .and_then(|s| s.to_str())?
+            .to_string();
+        if self.config.interactive.iter().any(|p| p == &basename) {
+            Some(basename)
+        } else {
+            None
+        }
     }
 
     pub fn run_interactive(&mut self, cmd: &str) {
@@ -1114,20 +1164,6 @@ impl App {
 
 // --- Helpers ---
 
-
-/// Return true if `name` is an executable on $PATH.
-fn which_exists(name: &str) -> bool {
-    let Ok(path) = std::env::var("PATH") else { return false };
-    for dir in path.split(':') {
-        if dir.is_empty() { continue; }
-        let candidate = std::path::Path::new(dir).join(name);
-        if candidate.exists() {
-            // We only need it callable; let `run_interactive` discover perms.
-            return true;
-        }
-    }
-    false
-}
 
 /// Content-sniff a file to decide if $EDITOR is a sensible opener.
 /// Reads the first 512 bytes and considers it text unless it contains a

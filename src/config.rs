@@ -80,7 +80,7 @@ fn default_border() -> u8 { 2 }
 fn default_true() -> bool { true }
 fn default_sort() -> String { "name".into() }
 fn default_interactive() -> Vec<String> {
-    vec!["fzf", "navi", "top", "htop", "less", "vi", "vim", "ncdu", "sh", "zsh", "bash", "fish", "mplayer", "nano"]
+    vec!["fzf", "navi", "top", "htop", "less", "vi", "vim", "ncdu", "sh", "zsh", "bash", "fish", "mplayer", "nano", "hyper"]
         .into_iter().map(String::from).collect()
 }
 fn default_topmatch() -> Vec<(String, u16)> { vec![("".into(), 249)] }
