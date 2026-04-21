@@ -149,7 +149,14 @@ fn main() {
             "X" => { app.compare_files(); }
             "s" => { app.link_items(); app.reload_and_render(); }
             "d" => { app.delete_items(); app.reload_and_render(); }
-            "D" => { app.trash_browse(); }
+            "D" => {
+                if app.is_archive_mode() {
+                    app.archive_extract_entries();
+                    app.render();
+                } else {
+                    app.trash_browse();
+                }
+            }
             "C-D" => { app.toggle_trash(); }
             "C-P" => { app.chmod(); app.reload_and_render(); }
             "C-O" => { app.chown(); app.reload_and_render(); }

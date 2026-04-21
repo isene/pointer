@@ -52,7 +52,7 @@ Press `?` for built-in help. Press `q` to quit (saves state).
 - **LS_COLORS support** for consistent terminal theming
 - **Syntax highlighting** built-in (20+ languages, plus dedicated Markdown/LaTeX/plaintext renderers with URL/TODO detection) with 6 themes, bat as optional toggle
 - **Image preview** via kitty/sixel/w3m protocols (using glow)
-- **Archive browsing** (zip, tar, gz, bz2, xz, rar, 7z as virtual directories)
+- **Archive browsing and editing** (zip, tar, gz, bz2, xz, rar, 7z as virtual directories — enter with ENTER/→, then `d` to delete, `D` to extract, `p` to paste in files tagged before entering)
 - **SSH/SFTP remote browsing** (Ctrl-E)
 - **Async file operations** with progress for large copy/move
 - **Comprehensive undo** (delete, move, rename, copy, symlink, permissions, bulk rename)

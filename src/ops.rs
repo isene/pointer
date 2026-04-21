@@ -98,6 +98,10 @@ impl App {
 
     /// Copy tagged/selected items to current directory (async for multi-item)
     pub fn copy_items(&mut self) {
+        if self.is_archive_mode() {
+            self.archive_add_files();
+            return;
+        }
         if self.file_op_running() {
             self.msg_error("Another file operation is in progress");
             return;
@@ -221,6 +225,10 @@ impl App {
 
     /// Delete tagged/selected items (RTFM style: show info in right pane, single-key confirm)
     pub fn delete_items(&mut self) {
+        if self.is_archive_mode() {
+            self.archive_delete_entries();
+            return;
+        }
         let items = self.op_items();
         if items.is_empty() { return; }
 

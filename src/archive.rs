@@ -10,8 +10,10 @@ pub struct ArchiveState {
     pub archive_path: PathBuf,
     pub current_dir: String,    // virtual dir inside archive, "" = root
     pub entries: Vec<ArchiveEntry>,
-    pub saved_tagged: Vec<PathBuf>,  // preserve tagged from before archive mode
+    pub saved_tagged: Vec<PathBuf>,  // outer tags to restore on exit
+    pub origin_tagged: Vec<PathBuf>, // outer tags used as source for paste-into-archive
     pub saved_index: usize,          // preserve selection index
+    pub origin_dir: PathBuf,         // cwd when archive was entered (extract destination)
 }
 
 #[derive(Clone)]
@@ -38,14 +40,21 @@ impl App {
 
         // Save current state before entering archive
         let saved_tagged = self.tagged.clone();
+        let origin_tagged = self.tagged.clone();
         let saved_index = self.index;
+        let origin_dir = std::env::current_dir().unwrap_or_default();
         self.archive_state = Some(ArchiveState {
             archive_path: path.to_path_buf(),
             current_dir: String::new(),
             saved_tagged,
+            origin_tagged,
             saved_index,
+            origin_dir,
             entries: all_entries,
         });
+        // Scope tags to archive mode — outer tags are restored on exit.
+        self.tagged.clear();
+        self.tagged_size_cache = None;
         self.index = 0;
         self.scroll_ix = 0;
         self.load_archive_dir();
@@ -208,6 +217,226 @@ impl App {
         }
     }
 
+    /// Collect virtual paths to operate on: tagged (inside archive) or selected.
+    /// Never returns "..".
+    fn archive_op_paths(&self) -> Vec<String> {
+        if !self.tagged.is_empty() {
+            return self.tagged.iter()
+                .map(|p| p.to_string_lossy().to_string())
+                .filter(|s| s != "..")
+                .collect();
+        }
+        if let Some(entry) = self.files.get(self.index) {
+            if entry.name != ".." {
+                return vec![entry.path.to_string_lossy().to_string()];
+            }
+        }
+        Vec::new()
+    }
+
+    /// Re-parse archive contents from disk and reload current virtual dir.
+    pub fn archive_refresh(&mut self) {
+        let Some(state) = self.archive_state.as_ref() else { return };
+        let archive_path = state.archive_path.clone();
+        let ext = archive_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_string();
+        let new_entries = parse_archive(&archive_path, &ext);
+        if let Some(state) = self.archive_state.as_mut() {
+            state.entries = new_entries;
+        }
+        self.tagged.clear();
+        self.tagged_size_cache = None;
+        self.load_archive_dir();
+    }
+
+    /// Delete tagged/selected entries from the archive on disk.
+    pub fn archive_delete_entries(&mut self) {
+        if !self.is_archive_mode() { return; }
+        let paths = self.archive_op_paths();
+        if paths.is_empty() { return; }
+        let archive_path = self.archive_state.as_ref().unwrap().archive_path.clone();
+
+        let mut lines = vec![
+            style::fg("Delete from Archive", 196),
+            "=".repeat(40),
+            String::new(),
+            format!("Archive: {}", archive_path.file_name().unwrap_or_default().to_string_lossy()),
+            String::new(),
+            style::fg("Items to delete:", 226),
+        ];
+        for p in paths.iter().take(10) { lines.push(format!("  {}", p)); }
+        if paths.len() > 10 { lines.push(format!("  ... and {} more", paths.len() - 10)); }
+        lines.push(String::new());
+        lines.push(style::fg("This modifies the archive file permanently!", 196));
+        self.show_in_right(&lines.join("\n"));
+        self.status.say(&style::fg(&format!(" Delete {} item(s) from archive? (y/n)", paths.len()), 196));
+
+        let Some(key) = crust::Input::getchr(None) else { return };
+        if key != "y" && key != "Y" {
+            self.msg_cancel();
+            return;
+        }
+
+        let ext = archive_ext(&archive_path);
+        let success = match ext.as_str() {
+            "zip" | "jar" | "war" => run_cmd("zip", &[&["-d".into(), archive_path.to_string_lossy().to_string()][..], &paths[..]].concat()),
+            "rar" => run_cmd("rar", &[&["d".into(), archive_path.to_string_lossy().to_string()][..], &paths[..]].concat()),
+            "7z" => run_cmd("7z", &[&["d".into(), archive_path.to_string_lossy().to_string()][..], &paths[..]].concat()),
+            _ => archive_tar_modify(&archive_path, TarAction::Delete(paths.clone()), ""),
+        };
+
+        if success {
+            self.msg_success(&format!("Deleted {} item(s) from archive", paths.len()));
+            self.archive_refresh();
+        } else {
+            self.msg_error("Delete failed");
+        }
+    }
+
+    /// Extract tagged/selected entries to the directory where we entered the archive.
+    pub fn archive_extract_entries(&mut self) {
+        if !self.is_archive_mode() { return; }
+        let paths = self.archive_op_paths();
+        if paths.is_empty() { return; }
+        let state = self.archive_state.as_ref().unwrap();
+        let archive_path = state.archive_path.clone();
+        let dest = state.origin_dir.clone();
+        let archive_s = archive_path.to_string_lossy().to_string();
+        let dest_s = dest.to_string_lossy().to_string();
+
+        self.msg_info(&format!("Extracting {} item(s) to {}...", paths.len(), dest.display()));
+
+        let ext = archive_ext(&archive_path);
+        let success = match ext.as_str() {
+            "zip" | "jar" | "war" => {
+                let mut args: Vec<String> = vec!["-o".into(), archive_s.clone()];
+                args.extend(paths.iter().cloned());
+                args.push("-d".into());
+                args.push(dest_s.clone());
+                run_cmd("unzip", &args)
+            }
+            "rar" => {
+                let mut args: Vec<String> = vec!["x".into(), "-o+".into(), archive_s.clone()];
+                args.extend(paths.iter().cloned());
+                args.push(format!("{}/", dest_s));
+                run_cmd("unrar", &args)
+            }
+            "7z" => {
+                let mut args: Vec<String> = vec!["x".into(), archive_s.clone()];
+                args.extend(paths.iter().cloned());
+                args.push(format!("-o{}", dest_s));
+                args.push("-y".into());
+                run_cmd("7z", &args)
+            }
+            _ => {
+                // tar variants: tar xf ARCHIVE -C DEST PATHS...
+                let flag = tar_decompress_flag(&archive_path);
+                let mut args: Vec<String> = Vec::new();
+                args.push(format!("x{}f", flag));
+                args.push(archive_s.clone());
+                args.push("-C".into());
+                args.push(dest_s.clone());
+                args.extend(paths.iter().cloned());
+                run_cmd("tar", &args)
+            }
+        };
+
+        if success {
+            self.msg_success(&format!("Extracted {} item(s) to {}", paths.len(), dest.display()));
+            self.tagged.clear();
+            self.tagged_size_cache = None;
+        } else {
+            self.msg_error("Extraction failed");
+        }
+    }
+
+    /// Add files (tagged before entering archive) into the current virtual directory.
+    pub fn archive_add_files(&mut self) {
+        if !self.is_archive_mode() { return; }
+        let state = self.archive_state.as_ref().unwrap();
+        if state.origin_tagged.is_empty() {
+            self.msg_warn("Tag files first, then enter the archive to add them");
+            return;
+        }
+        let archive_path = state.archive_path.clone();
+        let current_dir = state.current_dir.clone();
+        let files: Vec<PathBuf> = state.origin_tagged.iter()
+            .filter(|p| p.exists())
+            .cloned()
+            .collect();
+        if files.is_empty() {
+            self.msg_error("Tagged files no longer exist");
+            return;
+        }
+
+        let target = if current_dir.is_empty() { "archive root".into() } else { current_dir.clone() };
+        let mut lines = vec![
+            style::fg("Add Files to Archive", 226),
+            "=".repeat(40),
+            String::new(),
+            format!("Archive: {}", archive_path.file_name().unwrap_or_default().to_string_lossy()),
+            format!("Target:  {}", target),
+            String::new(),
+            style::fg("Files to add:", 226),
+        ];
+        for f in files.iter().take(10) {
+            lines.push(format!("  {}", f.file_name().unwrap_or_default().to_string_lossy()));
+        }
+        if files.len() > 10 { lines.push(format!("  ... and {} more", files.len() - 10)); }
+        self.show_in_right(&lines.join("\n"));
+        self.status.say(&style::fg(&format!(" Add {} file(s) to archive? (y/n)", files.len()), 226));
+
+        let Some(key) = crust::Input::getchr(None) else { return };
+        if key != "y" && key != "Y" {
+            self.msg_cancel();
+            return;
+        }
+
+        let ext = archive_ext(&archive_path);
+        let success = match ext.as_str() {
+            "zip" | "jar" | "war" => {
+                if current_dir.is_empty() {
+                    // Junk paths so files land in archive root without leading dirs
+                    let mut args: Vec<String> = vec!["-j".into(), archive_path.to_string_lossy().to_string()];
+                    for f in &files { args.push(f.to_string_lossy().to_string()); }
+                    run_cmd("zip", &args)
+                } else {
+                    add_to_subdir_via_tempdir(&archive_path, &current_dir, &files, AddKind::Zip)
+                }
+            }
+            "rar" => {
+                let mut args: Vec<String> = vec!["a".into()];
+                if !current_dir.is_empty() {
+                    args.push(format!("-ap{}", current_dir));
+                }
+                args.push(archive_path.to_string_lossy().to_string());
+                for f in &files { args.push(f.to_string_lossy().to_string()); }
+                run_cmd("rar", &args)
+            }
+            "7z" => {
+                if current_dir.is_empty() {
+                    let mut args: Vec<String> = vec!["a".into(), archive_path.to_string_lossy().to_string()];
+                    for f in &files { args.push(f.to_string_lossy().to_string()); }
+                    run_cmd("7z", &args)
+                } else {
+                    add_to_subdir_via_tempdir(&archive_path, &current_dir, &files, AddKind::SevenZ)
+                }
+            }
+            _ => archive_tar_modify(&archive_path, TarAction::Add { files: files.clone(), target_dir: current_dir.clone() }, ""),
+        };
+
+        if success {
+            self.msg_success(&format!("Added {} file(s) to archive", files.len()));
+            // Clear origin_tagged so a second paste doesn't duplicate
+            if let Some(state) = self.archive_state.as_mut() {
+                state.origin_tagged.clear();
+                state.saved_tagged.clear();
+            }
+            self.archive_refresh();
+        } else {
+            self.msg_error("Add failed");
+        }
+    }
+
     /// Create archive from tagged items
     pub fn archive_create(&mut self) {
         if self.tagged.is_empty() {
@@ -247,6 +476,194 @@ impl App {
             _ => { self.msg_error("Archive creation failed"); }
         }
     }
+}
+
+/// Return lowercased archive extension, handling .tar.gz / .tar.bz2 / .tar.xz / .tar.zst.
+fn archive_ext(path: &Path) -> String {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+    for s in [".tar.gz", ".tar.bz2", ".tar.xz", ".tar.zst"] {
+        if name.ends_with(s) { return s.trim_start_matches('.').to_string(); }
+    }
+    path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase()
+}
+
+fn tar_decompress_flag(path: &Path) -> &'static str {
+    match archive_ext(path).as_str() {
+        "tar.gz" | "tgz" | "gz"     => "z",
+        "tar.bz2" | "tbz2" | "tbz" | "bz2" => "j",
+        "tar.xz"  | "txz"  | "xz"   => "J",
+        "tar.zst"                   => "",
+        _ => "",
+    }
+}
+
+fn tar_compress_flag(path: &Path) -> &'static str { tar_decompress_flag(path) }
+
+/// Uses zstd flag separately since it's a long option, not a single letter.
+fn tar_is_zstd(path: &Path) -> bool {
+    archive_ext(path).as_str() == "tar.zst"
+}
+
+fn run_cmd(bin: &str, args: &[String]) -> bool {
+    Command::new(bin)
+        .args(args)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+enum TarAction {
+    Delete(Vec<String>),
+    Add { files: Vec<PathBuf>, target_dir: String },
+}
+
+/// tar doesn't support in-place edits for compressed archives: extract to a
+/// temp dir, mutate there, re-archive to the original path.
+fn archive_tar_modify(archive: &Path, action: TarAction, _reserved: &str) -> bool {
+    let tmp = match tempdir() {
+        Some(t) => t,
+        None => return false,
+    };
+    let tmp_path = tmp.clone();
+    let archive_s = archive.to_string_lossy().to_string();
+    let tmp_s = tmp_path.to_string_lossy().to_string();
+
+    // Extract everything into tmp
+    let ok = if tar_is_zstd(archive) {
+        run_cmd("tar", &["--zstd".into(), "-xf".into(), archive_s.clone(), "-C".into(), tmp_s.clone()])
+    } else {
+        let flag = tar_decompress_flag(archive);
+        run_cmd("tar", &[format!("x{}f", flag), archive_s.clone(), "-C".into(), tmp_s.clone()])
+    };
+    if !ok {
+        let _ = std::fs::remove_dir_all(&tmp_path);
+        return false;
+    }
+
+    match action {
+        TarAction::Delete(paths) => {
+            for p in paths {
+                let target = tmp_path.join(&p);
+                let _ = std::fs::remove_dir_all(&target);
+                let _ = std::fs::remove_file(&target);
+            }
+        }
+        TarAction::Add { files, target_dir } => {
+            let dest = if target_dir.is_empty() { tmp_path.clone() } else { tmp_path.join(&target_dir) };
+            if std::fs::create_dir_all(&dest).is_err() {
+                let _ = std::fs::remove_dir_all(&tmp_path);
+                return false;
+            }
+            for f in files {
+                let name = f.file_name().unwrap_or_default();
+                let target = dest.join(name);
+                if f.is_dir() {
+                    let _ = copy_dir_recursive(&f, &target);
+                } else {
+                    let _ = std::fs::copy(&f, &target);
+                }
+            }
+        }
+    }
+
+    // Re-archive everything in tmp into the original archive path.
+    // We cd into tmp and bundle all top-level entries, so paths stay relative.
+    let entries: Vec<String> = match std::fs::read_dir(&tmp_path) {
+        Ok(rd) => rd.filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().to_string())).collect(),
+        Err(_) => { let _ = std::fs::remove_dir_all(&tmp_path); return false; }
+    };
+    if entries.is_empty() {
+        // Nothing to archive — still write an empty tar so the file stays valid.
+        let _ = std::fs::remove_dir_all(&tmp_path);
+        return false;
+    }
+
+    let ok = if tar_is_zstd(archive) {
+        let mut args: Vec<String> = vec!["--zstd".into(), "-cf".into(), archive_s.clone(), "-C".into(), tmp_s.clone()];
+        args.extend(entries);
+        run_cmd("tar", &args)
+    } else {
+        let flag = tar_compress_flag(archive);
+        let mut args: Vec<String> = vec![format!("c{}f", flag), archive_s.clone(), "-C".into(), tmp_s.clone()];
+        args.extend(entries);
+        run_cmd("tar", &args)
+    };
+
+    let _ = std::fs::remove_dir_all(&tmp_path);
+    ok
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        let ft = entry.file_type()?;
+        if ft.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else if ft.is_symlink() {
+            let link = std::fs::read_link(&src_path)?;
+            let _ = std::os::unix::fs::symlink(link, &dst_path);
+        } else {
+            std::fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
+enum AddKind { Zip, SevenZ }
+
+/// zip/7z add files to a subdirectory by building the layout in a tempdir
+/// and then pointing the archiver at the resulting relative paths.
+fn add_to_subdir_via_tempdir(archive: &Path, subdir: &str, files: &[PathBuf], kind: AddKind) -> bool {
+    let Some(tmp) = tempdir() else { return false; };
+    let target = tmp.join(subdir);
+    if std::fs::create_dir_all(&target).is_err() {
+        let _ = std::fs::remove_dir_all(&tmp);
+        return false;
+    }
+    for f in files {
+        let name = f.file_name().unwrap_or_default();
+        let dest = target.join(name);
+        if f.is_dir() {
+            let _ = copy_dir_recursive(f, &dest);
+        } else {
+            let _ = std::fs::copy(f, &dest);
+        }
+    }
+    // Run the archiver with cwd=tmp so relative paths like "subdir/name" match.
+    let archive_s = archive.to_string_lossy().to_string();
+    let mut args: Vec<String> = match kind {
+        AddKind::Zip => vec!["-r".into(), archive_s.clone()],
+        AddKind::SevenZ => vec!["a".into(), archive_s.clone()],
+    };
+    for f in files {
+        let name = f.file_name().unwrap_or_default().to_string_lossy().to_string();
+        args.push(format!("{}/{}", subdir, name));
+    }
+    let bin = match kind { AddKind::Zip => "zip", AddKind::SevenZ => "7z" };
+    let ok = Command::new(bin)
+        .args(&args)
+        .current_dir(&tmp)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    let _ = std::fs::remove_dir_all(&tmp);
+    ok
+}
+
+fn tempdir() -> Option<PathBuf> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_nanos();
+    let pid = std::process::id();
+    let base = std::env::temp_dir().join(format!("pointer_arc_{}_{}", pid, nanos));
+    std::fs::create_dir_all(&base).ok()?;
+    Some(base)
 }
 
 fn parse_archive(path: &Path, ext: &str) -> Vec<ArchiveEntry> {
