@@ -203,6 +203,8 @@ Commands receive `POINTER_CONTEXT` env var with JSON state. Unmatched keys fall 
 
 ## Part of the Rust Terminal Suite (Fe2O3)
 
+See the [Fe₂O₃ suite overview](https://github.com/isene/fe2o3) and the [landing page](https://isene.org/fe2o3/) for the full list of projects.
+
 | Tool | Clones | Type |
 |------|--------|------|
 | [rush](https://github.com/isene/rush) | [rsh](https://github.com/isene/rsh) | Shell |
