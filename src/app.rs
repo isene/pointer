@@ -208,6 +208,14 @@ impl App {
                 self.index = pos;
             }
         }
+        // Post-mutation: force a preview re-render. Rename/delete/paste may
+        // leave a different file under the cursor (or the same path pointing
+        // at different content) and a previous op may have locked the right
+        // pane for a confirmation. Without this, render_right's dedup can
+        // skip the redraw and the user has to press Enter to see it.
+        self.right_pane_locked = false;
+        self.prev_selected = None;
+        self.clear_image();
         self.render();
     }
 
