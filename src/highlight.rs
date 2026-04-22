@@ -755,6 +755,9 @@ const TXT_TODO: u8 = 208;    // orange
 /// Markdown highlighter: headers, bold, italic, inline/fenced code, links,
 /// blockquotes, lists, horizontal rules.
 pub fn highlight_markdown(text: &str, max_lines: usize) -> String {
+    // Expand Markdown tables into Unicode-box blocks before per-line
+    // highlighting so the highlighter sees already-laid-out rows.
+    let text = crust::text::format_markdown_tables(text, 100);
     let mut out = String::with_capacity(text.len() * 2);
     let mut in_fence = false;
     let mut fence_marker = String::new();
