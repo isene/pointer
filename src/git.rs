@@ -222,9 +222,19 @@ impl App {
         for f in &files { items.push(("file", f)); }
         for d in &dirs { items.push(("dir", d)); }
 
+        // Count items up-front so the header notice reflects the real
+        // range — files + dirs, both capped at 9 each (so up to 18).
+        let n_items = files.len() + dirs.len();
         let mut lines = vec![
             style::fg("Recent Files & Directories", 81),
             "=".repeat(50),
+            style::fg(
+                &format!(
+                    "Type 1-{}; unambiguous digits jump immediately, ambiguous ones wait for ENTER / more digits (BACKSPACE to edit, ESC to cancel).",
+                    n_items.max(1)
+                ),
+                240,
+            ),
             String::new(),
         ];
 
@@ -264,10 +274,6 @@ impl App {
             let _ = Input::getchr(None);
             return;
         }
-        lines.push(String::new());
-        lines.push(style::fg(
-            &format!("Type a number 1-{}, ENTER to commit, ESC to cancel", items.len()),
-            240));
         self.show_in_right(&lines.join("\n"));
 
         // Buffered multi-digit input: each digit extends the buffer. We
