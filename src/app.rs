@@ -1126,15 +1126,22 @@ impl App {
             } else {
                 self.msg_error(&msg);
             }
-            self.load_dir();
-
-            // Reset state
-            let mut state = self.file_op.lock().unwrap();
-            state.complete = false;
-            state.progress.clear();
-            state.result_msg = None;
-            state.undo_op = None;
+            // Reset state BEFORE reload_and_render so the render can see a
+            // quiescent file_op state.
+            {
+                let mut state = self.file_op.lock().unwrap();
+                state.complete = false;
+                state.progress.clear();
+                state.result_msg = None;
+                state.undo_op = None;
+            }
             self.file_op_thread = None;
+            // reload_and_render redraws the panes so freshly moved/copied
+            // files appear immediately — without this, main's reload_and_render
+            // fires before the async thread completes and the new listing
+            // waits until the user moves the cursor.
+            self.reload_and_render();
+            return;
         } else if !state.progress.is_empty() {
             let progress = state.progress.clone();
             drop(state);
