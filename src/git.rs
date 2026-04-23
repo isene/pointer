@@ -265,22 +265,49 @@ impl App {
             return;
         }
         lines.push(String::new());
-        lines.push(style::fg("Number (1-9) to jump, ENTER to type a number, ESC to close", 240));
+        lines.push(style::fg(
+            &format!("Type a number 1-{}, ENTER to commit, ESC to cancel", items.len()),
+            240));
         self.show_in_right(&lines.join("\n"));
 
-        // Block for input: digit, ENTER, or exit.
-        let Some(key) = Input::getchr(None) else { return };
-        let picked_idx: Option<usize> = match key.as_str() {
-            "ESC" | "C-R" => None,
-            "ENTER" => {
-                let typed = self.prompt("Jump to #: ", "");
-                typed.parse::<usize>().ok().filter(|n| *n >= 1 && *n <= items.len()).map(|n| n - 1)
+        // Buffered multi-digit input: each digit extends the buffer. We
+        // commit as soon as another digit could not produce a valid index
+        // (n*10 > items.len()), so short IDs still jump on a single
+        // keystroke. Ambiguous buffers (e.g. "1" when 10..18 exist) wait
+        // for ENTER or another digit.
+        let mut buf = String::new();
+        let picked_idx: Option<usize> = loop {
+            let Some(key) = Input::getchr(None) else { break None };
+            match key.as_str() {
+                "ESC" | "C-R" => break None,
+                "ENTER" => {
+                    if buf.is_empty() {
+                        let typed = self.prompt("Jump to #: ", "");
+                        break typed.parse::<usize>().ok()
+                            .filter(|n| *n >= 1 && *n <= items.len())
+                            .map(|n| n - 1);
+                    }
+                    break buf.parse::<usize>().ok()
+                        .filter(|n| *n >= 1 && *n <= items.len())
+                        .map(|n| n - 1);
+                }
+                "BACKSPACE" | "BACK" | "DEL" => { buf.pop(); }
+                k if k.len() == 1 && k.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) => {
+                    buf.push_str(k);
+                    let n: usize = buf.parse().unwrap_or(0);
+                    if n == 0 {
+                        // Leading zero is meaningless; reset.
+                        buf.clear();
+                        continue;
+                    }
+                    // If another digit can't produce a valid index, commit now.
+                    if n.saturating_mul(10) > items.len() {
+                        break if n <= items.len() { Some(n - 1) } else { None };
+                    }
+                    // Otherwise wait for more digits or ENTER.
+                }
+                _ => break None,
             }
-            k if k.len() == 1 && k.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) => {
-                let n: usize = k.parse().unwrap_or(0);
-                if n >= 1 && n <= items.len() { Some(n - 1) } else { None }
-            }
-            _ => None,
         };
 
         let Some(idx) = picked_idx else { return };

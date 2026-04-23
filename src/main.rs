@@ -47,8 +47,10 @@ fn main() {
 
     loop {
         app.check_file_op();
-        // 2-second idle refresh (1s during async ops) to catch filesystem changes
-        let timeout = if app.file_op_running() { Some(1) } else { Some(2) };
+        app.check_shell_cmd();
+        // 2-second idle refresh (1s during async ops) to catch filesystem
+        // changes and drain completed background shell commands.
+        let timeout = if app.file_op_running() || app.shell_cmd_running() { Some(1) } else { Some(2) };
         let key = match Input::getchr(timeout) {
             Some(k) => k,
             None => {

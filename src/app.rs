@@ -20,6 +20,17 @@ pub struct FileOpState {
     pub undo_op: Option<UndoOp>,
 }
 
+/// Shared state for a non-interactive shell command launched from command
+/// mode. Runs in a background thread so GUI apps (gimp, xdg-open, etc.)
+/// don't wedge the TUI — pointer keeps rendering and responding to keys
+/// while the child process is alive.
+pub struct ShellCmdState {
+    pub cmd: String,
+    pub complete: bool,
+    pub output: String,
+    pub exit_code: Option<i32>,
+}
+
 pub struct App {
     pub top: Pane,
     pub left: Pane,
@@ -51,6 +62,8 @@ pub struct App {
     pub archive_state: Option<crate::archive::ArchiveState>,
     pub file_op: Arc<Mutex<FileOpState>>,
     pub file_op_thread: Option<std::thread::JoinHandle<()>>,
+    pub shell_cmd: Arc<Mutex<ShellCmdState>>,
+    pub shell_cmd_thread: Option<std::thread::JoinHandle<()>>,
     pub pick_output: Option<String>,
     pub fresh: bool,
     pub locate_active: bool,
@@ -111,6 +124,13 @@ impl App {
                 undo_op: None,
             })),
             file_op_thread: None,
+            shell_cmd: Arc::new(Mutex::new(ShellCmdState {
+                cmd: String::new(),
+                complete: false,
+                output: String::new(),
+                exit_code: None,
+            })),
+            shell_cmd_thread: None,
             pick_output: None,
             fresh,
             locate_active: false,
@@ -1146,6 +1166,42 @@ impl App {
             let progress = state.progress.clone();
             drop(state);
             self.msg_info(&progress);
+        }
+    }
+
+    /// Whether a background shell command (launched from `:` command mode)
+    /// is still running.
+    pub fn shell_cmd_running(&self) -> bool {
+        self.shell_cmd_thread.as_ref().map(|t| !t.is_finished()).unwrap_or(false)
+    }
+
+    /// Poll the background shell command; when complete, drop its output
+    /// into the right pane and refresh the directory. Cheap enough to call
+    /// every main-loop iteration.
+    pub fn check_shell_cmd(&mut self) {
+        let (complete, output, exit_code, cmd) = {
+            let s = self.shell_cmd.lock().unwrap();
+            if !s.complete { return; }
+            (s.complete, s.output.clone(), s.exit_code, s.cmd.clone())
+        };
+        if complete {
+            if output.is_empty() {
+                self.msg_info(&format!("[{}] exit {}", cmd, exit_code.unwrap_or(-1)));
+            } else {
+                self.show_in_right(&output);
+                self.msg_info(&format!("[{}] done", cmd));
+            }
+            {
+                let mut s = self.shell_cmd.lock().unwrap();
+                s.complete = false;
+                s.output.clear();
+                s.cmd.clear();
+                s.exit_code = None;
+            }
+            self.shell_cmd_thread = None;
+            // Reload the directory — the command may have created/deleted
+            // files. reload_and_render triggers the pane redraw.
+            self.reload_and_render();
         }
     }
 

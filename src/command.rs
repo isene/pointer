@@ -51,32 +51,46 @@ impl App {
             return;
         }
 
-        // Run command, show output in right pane
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg(&expanded)
-            .output();
-
-        match output {
-            Ok(out) => {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                let stderr = String::from_utf8_lossy(&out.stderr);
-                let mut result = stdout.to_string();
-                if !stderr.is_empty() {
-                    if !result.is_empty() { result.push('\n'); }
-                    result.push_str(&style::fg(&stderr, 196));
-                }
-                if result.is_empty() {
-                    self.msg_info(&format!("Exit: {}", out.status.code().unwrap_or(-1)));
-                } else {
-                    self.show_in_right(&result);
-                }
-            }
-            Err(e) => {
-                self.msg_error(&format!("{}", e));
-            }
+        // Non-interactive command: run in a background thread so GUI apps
+        // (gimp, xdg-open, firefox, …) don't block the TUI's main loop.
+        // The main loop polls shell_cmd_state via check_shell_cmd() and
+        // drops the captured output into the right pane on completion.
+        if self.shell_cmd_running() {
+            self.msg_warn("A background command is still running");
+            return;
         }
-        self.load_dir();
+        let state = self.shell_cmd.clone();
+        {
+            let mut s = state.lock().unwrap();
+            s.cmd = expanded.clone();
+            s.complete = false;
+            s.output.clear();
+            s.exit_code = None;
+        }
+        let cmd_str = expanded.clone();
+        self.shell_cmd_thread = Some(std::thread::spawn(move || {
+            let out = Command::new("sh").arg("-c").arg(&cmd_str).output();
+            let mut s = state.lock().unwrap();
+            match out {
+                Ok(o) => {
+                    let stdout = String::from_utf8_lossy(&o.stdout);
+                    let stderr = String::from_utf8_lossy(&o.stderr);
+                    let mut result = stdout.to_string();
+                    if !stderr.is_empty() {
+                        if !result.is_empty() { result.push('\n'); }
+                        result.push_str(&style::fg(&stderr, 196));
+                    }
+                    s.output = result;
+                    s.exit_code = o.status.code();
+                }
+                Err(e) => {
+                    s.output = format!("{}", e);
+                    s.exit_code = Some(-1);
+                }
+            }
+            s.complete = true;
+        }));
+        self.msg_info(&format!("Running: {}", expanded));
     }
 
     /// Show command history in right pane
