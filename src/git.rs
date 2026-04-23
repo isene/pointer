@@ -288,6 +288,12 @@ impl App {
         let target_path = path.to_string();
         drop(items);
 
+        // Unlock the right pane (show_in_right locked it when rendering the
+        // picker) and invalidate its cached selection so the preview of the
+        // landed-on file renders fresh.
+        self.right_pane_locked = false;
+        self.prev_selected = None;
+
         if kind == "dir" {
             let target = std::path::PathBuf::from(&target_path);
             if target.is_dir() {
@@ -296,8 +302,11 @@ impl App {
                 let _ = std::env::set_current_dir(&target);
                 self.index = 0;
                 self.scroll_ix = 0;
-                self.prev_selected = None;
                 self.load_dir();
+                self.render();
+                self.msg_info(&format!("Jumped to {}", target.display()));
+            } else {
+                self.msg_warn(&format!("{} no longer exists", target.display()));
             }
         } else {
             let target = std::path::PathBuf::from(&target_path);
@@ -308,13 +317,18 @@ impl App {
                     let _ = std::env::set_current_dir(parent);
                     self.index = 0;
                     self.scroll_ix = 0;
-                    self.prev_selected = None;
                     self.load_dir();
-                    if let Some(name) = target.file_name().map(|n| n.to_string_lossy().to_string()) {
-                        if let Some(pos) = self.files.iter().position(|e| e.name == name) {
+                    let name_opt = target.file_name().map(|n| n.to_string_lossy().to_string());
+                    if let Some(ref name) = name_opt {
+                        if let Some(pos) = self.files.iter().position(|e| &e.name == name) {
                             self.index = pos;
                         }
                     }
+                    self.render();
+                    let display = name_opt.unwrap_or_else(|| target_path.clone());
+                    self.msg_info(&format!("Jumped to {}", display));
+                } else {
+                    self.msg_warn(&format!("{} parent directory missing", target.display()));
                 }
             }
         }
