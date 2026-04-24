@@ -22,9 +22,11 @@ use crust::{Crust, Input};
 fn main() {
     config::ensure_dirs();
 
-    // Parse --pick argument and --fresh flag
+    // Parse --pick argument, --fresh flag, and an optional positional path.
+    // The positional path may be a directory (cd there) or a file (cd into
+    // its parent and select the file). `~` is expanded from $HOME.
     let mut pick_output = None;
-    let mut start_dir = None;
+    let mut start_arg: Option<String> = None;
     let mut fresh = false;
     for arg in std::env::args().skip(1) {
         if arg.starts_with("--pick=") {
@@ -32,17 +34,58 @@ fn main() {
         } else if arg == "--fresh" {
             fresh = true;
         } else if !arg.starts_with('-') {
-            start_dir = Some(arg);
+            start_arg = Some(arg);
         }
     }
-    if let Some(ref dir) = start_dir {
-        let _ = std::env::set_current_dir(dir);
+
+    // Resolve the positional arg into (dir_to_cd_into, optional_file_to_select)
+    // BEFORE entering the alt screen so any error messages land on the normal
+    // terminal. If the path doesn't exist we fall back to the current cwd and
+    // show the error via stderr.
+    let mut initial_select: Option<String> = None;
+    if let Some(raw) = start_arg {
+        let expanded = if let Some(rest) = raw.strip_prefix("~/") {
+            let home = std::env::var("HOME").unwrap_or_default();
+            std::path::PathBuf::from(home).join(rest)
+        } else if raw == "~" {
+            std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default())
+        } else {
+            std::path::PathBuf::from(&raw)
+        };
+        match expanded.metadata() {
+            Ok(m) if m.is_dir() => {
+                if let Err(e) = std::env::set_current_dir(&expanded) {
+                    eprintln!("pointer: cannot enter {}: {}", expanded.display(), e);
+                    std::process::exit(1);
+                }
+            }
+            Ok(_) => {
+                // Regular file (or something else): open its parent dir and
+                // remember the filename so the cursor lands on it after load.
+                if let (Some(parent), Some(name)) = (expanded.parent(), expanded.file_name()) {
+                    if let Err(e) = std::env::set_current_dir(parent) {
+                        eprintln!("pointer: cannot enter {}: {}", parent.display(), e);
+                        std::process::exit(1);
+                    }
+                    initial_select = Some(name.to_string_lossy().to_string());
+                }
+            }
+            Err(e) => {
+                eprintln!("pointer: {}: {}", expanded.display(), e);
+                std::process::exit(1);
+            }
+        }
     }
 
     Crust::init();
 
     let mut app = app::App::new(fresh);
     app.pick_output = pick_output;
+    if let Some(name) = initial_select {
+        if let Some(pos) = app.files.iter().position(|e| e.name == name) {
+            app.index = pos;
+        }
+    }
     app.render();
 
     loop {
