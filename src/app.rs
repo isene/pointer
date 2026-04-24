@@ -487,6 +487,7 @@ impl App {
         let rw = cols.saturating_sub(split).saturating_sub(3);
 
         self.top = Pane::new(1, 1, cols, 1, self.config.c_top_fg, self.config.c_top_bg);
+        self.top.scroll = false;
         self.left = Pane::new(lx, content_y, lw, content_h, self.config.c_left_fg, self.config.c_left_bg);
         self.left.wrap = false;
         self.left.border = left_border;
@@ -495,6 +496,7 @@ impl App {
         self.right.border = right_border;
         self.right.border_fg = Some(self.config.c_border_fg);
         self.status = Pane::new(1, rows, cols, 1, self.config.c_status_fg, self.config.c_status_bg);
+        self.status.scroll = false;
 
         Crust::clear_screen();
         if left_border { self.left.border_refresh(); }
