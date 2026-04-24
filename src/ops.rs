@@ -122,7 +122,12 @@ impl App {
             } else {
                 self.msg_error("Copy failed");
             }
-            self.load_dir();
+            // Leave the directory listing alone here. main's reload_and_render
+            // runs after us and captures the cursor's file name from the
+            // pre-reload list, then restores the cursor by name after
+            // load_dir. Calling load_dir() ourselves clobbers that name-based
+            // restore and makes the cursor jump whenever the pasted file
+            // sorts above the previously selected one.
             return;
         }
 
@@ -186,7 +191,7 @@ impl App {
                 self.msg_error("Move failed");
             }
             self.tagged.clear();
-            self.load_dir();
+            // Leave the directory listing alone — see copy_items() for why.
             return;
         }
 
