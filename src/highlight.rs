@@ -287,6 +287,12 @@ pub fn highlight_hyperlist(text: &str, max_lines: usize) -> String {
         if count > 0 { result.push('\n'); }
         count += 1;
 
+        // VIM modeline
+        if line.starts_with("vim:") {
+            result.push_str(&style::fg(line, HL_GRAY));
+            continue;
+        }
+
         let trimmed = line.trim_start();
         let indent: String = line.chars().take(line.len() - trimmed.len()).collect();
 
@@ -297,6 +303,13 @@ pub fn highlight_hyperlist(text: &str, max_lines: usize) -> String {
             continue;
         }
 
+        // Literal marker: single "\" at end of line (HLlit)
+        if trimmed == "\\" {
+            result.push_str(&indent);
+            result.push_str(&style::italic("\\"));
+            continue;
+        }
+
         // State marker: | at start
         if trimmed.starts_with('|') {
             result.push_str(&indent);
@@ -304,8 +317,8 @@ pub fn highlight_hyperlist(text: &str, max_lines: usize) -> String {
             continue;
         }
 
-        // Transition marker: / at start (but not /italic/)
-        if trimmed.starts_with('/') && !trimmed.ends_with('/') {
+        // Transition marker: "/ " at start (but not /italic/)
+        if trimmed.starts_with("/ ") {
             result.push_str(&indent);
             result.push_str(&style::fg(trimmed, HL_GREEN));
             continue;
@@ -313,9 +326,30 @@ pub fn highlight_hyperlist(text: &str, max_lines: usize) -> String {
 
         // Process character by character
         result.push_str(&indent);
+
+        // Identifier (numbered list): leading "[0-9.]+ " — color magenta, then continue
         let work: Vec<char> = trimmed.chars().collect();
         let len = work.len();
         let mut i = 0;
+
+        {
+            let mut j = 0;
+            while j < len && (work[j].is_ascii_digit() || work[j] == '.') { j += 1; }
+            if j > 0 && j < len && work[j] == ' ' {
+                let ident: String = work[..j+1].iter().collect();
+                result.push_str(&style::fg(&ident, HL_MAGENTA));
+                i = j + 1;
+            }
+        }
+
+        // Detect property/operator header starting at `i`:
+        // scan forward for first ": " not inside brackets/parens/quotes/braces.
+        if let Some((hdr_end, is_op)) = detect_hl_header(&work[i..]) {
+            let hdr: String = work[i..i + hdr_end].iter().collect();
+            let color = if is_op { HL_BLUE } else { HL_RED };
+            result.push_str(&style::fg(&hdr, color));
+            i += hdr_end;
+        }
 
         while i < len {
             let ch = work[i];
@@ -431,37 +465,15 @@ pub fn highlight_hyperlist(text: &str, max_lines: usize) -> String {
                 continue;
             }
 
-            // Operators: ALL-CAPS word followed by colon-space
+            // SKIP / END reserved keywords (no colon)
             if ch.is_ascii_uppercase() {
                 let start = i;
-                while i < len && (work[i].is_ascii_uppercase() || work[i] == '_') { i += 1; }
-                if i < len && work[i] == ':' {
-                    i += 1; // include the colon
-                    let s: String = work[start..i].iter().collect();
-                    result.push_str(&style::fg(&s, HL_BLUE));
-                    continue;
-                }
-                // Special keywords: SKIP, END (no colon)
+                while i < len && work[i].is_ascii_uppercase() { i += 1; }
                 let word: String = work[start..i].iter().collect();
                 if matches!(word.as_str(), "SKIP" | "END") {
                     result.push_str(&style::fg(&word, HL_MAGENTA));
                     continue;
                 }
-                result.push_str(&word);
-                continue;
-            }
-
-            // Properties: Word followed by colon-space (mixed case)
-            if ch.is_alphabetic() {
-                let start = i;
-                while i < len && (work[i].is_alphanumeric() || work[i] == '_' || work[i] == '-' || work[i] == '.') { i += 1; }
-                if i < len && work[i] == ':' && i + 1 < len && work[i + 1] == ' ' {
-                    i += 1; // include the colon
-                    let s: String = work[start..i].iter().collect();
-                    result.push_str(&style::fg(&s, HL_RED));
-                    continue;
-                }
-                let word: String = work[start..i].iter().collect();
                 result.push_str(&word);
                 continue;
             }
@@ -508,6 +520,58 @@ pub fn highlight_hyperlist(text: &str, max_lines: usize) -> String {
         }
     }
     result
+}
+
+/// Detect a HyperList Property (HLtag) or Operator (HLop) line header.
+/// Returns Some((end_index_inclusive_of_colon_space, is_operator)) or None.
+/// Matches vim: first `: ` not inside [..], (..), "..", {..}, <..>.
+/// Operator = prefix is all-caps (with allowed punct), Property otherwise.
+fn detect_hl_header(work: &[char]) -> Option<(usize, bool)> {
+    let mut depth_sq = 0i32;
+    let mut depth_pa = 0i32;
+    let mut depth_br = 0i32;
+    let mut depth_an = 0i32;
+    let mut in_quote = false;
+    for i in 0..work.len() {
+        let c = work[i];
+        if in_quote {
+            if c == '"' { in_quote = false; }
+            continue;
+        }
+        match c {
+            '"' => in_quote = true,
+            '[' => depth_sq += 1,
+            ']' => depth_sq -= 1,
+            '(' => depth_pa += 1,
+            ')' => depth_pa -= 1,
+            '{' => depth_br += 1,
+            '}' => depth_br -= 1,
+            '<' => depth_an += 1,
+            '>' => depth_an -= 1,
+            ':' => {
+                if depth_sq <= 0 && depth_pa <= 0 && depth_br <= 0 && depth_an <= 0 {
+                    // Followed by space or end-of-line?
+                    let next_is_space = i + 1 >= work.len() || work[i + 1] == ' ';
+                    if next_is_space {
+                        let end = if i + 1 < work.len() { i + 2 } else { i + 1 };
+                        // Determine op vs prop: prefix all-caps?
+                        let prefix: String = work[..i].iter().collect();
+                        let trimmed_prefix = prefix.trim();
+                        if trimmed_prefix.is_empty() { return None; }
+                        // Operator: all letters in prefix are uppercase (at least one letter),
+                        // and only allowed chars: A-Z, space, _, -, (, ), /
+                        let has_letter = trimmed_prefix.chars().any(|c| c.is_ascii_alphabetic());
+                        let all_upper_or_punct = trimmed_prefix.chars().all(|c|
+                            c.is_ascii_uppercase() || matches!(c, ' ' | '_' | '-' | '(' | ')' | '/'));
+                        let is_op = has_letter && all_upper_or_punct;
+                        return Some((end, is_op));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// Highlight source code. Returns ANSI-colored string.

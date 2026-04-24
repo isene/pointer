@@ -1,6 +1,6 @@
 [package]
 name = "pointer"
-version = "0.1.30"
+version = "0.1.31"
 edition = "2021"
 authors = ["Geir Isene <g@isene.com>"]
 description = "Fast terminal file manager. Feature clone of RTFM, built on crust."
