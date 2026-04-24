@@ -697,7 +697,19 @@ impl App {
             .file_name()
             .and_then(|s| s.to_str())?
             .to_string();
-        if self.config.interactive.iter().any(|p| p == &basename) {
+        // Treat the launcher as interactive if either (a) the user has
+        // explicitly listed it in config.interactive, or (b) the .desktop
+        // file declares `Terminal=true`, which is the canonical way to
+        // advertise a TUI program. That way new terminal apps just work
+        // once the user registers them with xdg-mime, without needing a
+        // one-line edit in pointer's conf.json.
+        let wants_terminal = content.lines()
+            .filter_map(|l| l.strip_prefix("Terminal="))
+            .next()
+            .map(|v| v.trim().eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        let in_user_list = self.config.interactive.iter().any(|p| p == &basename);
+        if in_user_list || wants_terminal {
             Some(basename)
         } else {
             None
