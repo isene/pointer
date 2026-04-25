@@ -75,7 +75,7 @@ dependencies = [
 
 [[package]]
 name = "fe2o3-glow"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "base64",
  "libc",
@@ -157,7 +157,7 @@ dependencies = [
 
 [[package]]
 name = "pointer"
-version = "0.1.36"
+version = "0.1.37"
 dependencies = [
  "fe2o3-crust",
  "fe2o3-glow",
