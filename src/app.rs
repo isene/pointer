@@ -221,6 +221,7 @@ impl App {
             self.render();
             return;
         }
+        let prev_path = self.files.get(self.index).map(|e| e.path.clone());
         let prev_name = self.files.get(self.index).map(|e| e.name.clone());
         self.load_dir();
         if let Some(name) = prev_name {
@@ -228,15 +229,30 @@ impl App {
                 self.index = pos;
             }
         }
-        // Post-mutation: force a preview re-render. Rename/delete/paste may
-        // leave a different file under the cursor (or the same path pointing
-        // at different content) and a previous op may have locked the right
-        // pane for a confirmation. Without this, render_right's dedup can
-        // skip the redraw and the user has to press Enter to see it.
-        self.right_pane_locked = false;
-        self.prev_selected = None;
-        self.clear_image();
-        self.render();
+        // If the selection still points at the same path, the right pane
+        // (and any displayed image) is still correct. Skipping the clear +
+        // reset avoids a visible image flicker when an external tool (e.g.
+        // scrot) bumps the dir mtime by dropping an unrelated file in cwd.
+        let new_path = self.files.get(self.index).map(|e| e.path.clone());
+        let selection_changed = new_path != prev_path;
+
+        if selection_changed {
+            // Post-mutation: force a preview re-render. Rename/delete/paste
+            // may leave a different file under the cursor (or the same
+            // path pointing at different content) and a previous op may
+            // have locked the right pane for a confirmation. Without this,
+            // render_right's dedup can skip the redraw.
+            self.right_pane_locked = false;
+            self.prev_selected = None;
+            self.clear_image();
+            self.render();
+        } else {
+            // Listing changed but selection didn't — only redraw the panes
+            // whose contents depend on the listing (top counts, left list).
+            self.render_top();
+            self.render_left();
+            self.render_status();
+        }
     }
 
     pub fn render(&mut self) {
