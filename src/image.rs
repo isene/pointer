@@ -79,9 +79,10 @@ impl App {
         let Some(ref display) = self.image_display else { return };
         if !display.supported() { return; }
 
-        let (cell_w, _) = glow::get_cell_size();
-        if cell_w == 0 { return; }
+        let (cell_w, cell_h) = glow::get_cell_size();
+        if cell_w == 0 || cell_h == 0 { return; }
         let pixel_w = self.right.w as u32 * cell_w as u32;
+        let pixel_h = self.right.h as u32 * cell_h as u32;
 
         let cwd = std::env::current_dir().unwrap_or_default();
         let mut image_paths = Vec::new();
@@ -132,7 +133,7 @@ impl App {
                     all_paths.push(tn.to_string_lossy().to_string());
                 }
             }
-            glow::preconvert_images(&all_paths, pixel_w, &cache);
+            glow::preconvert_images(&all_paths, pixel_w, pixel_h, &cache);
             busy.store(false, Ordering::Relaxed);
         });
     }
