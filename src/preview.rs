@@ -37,7 +37,23 @@ pub fn preload_adjacent(paths: &[PathBuf], max_lines: usize, use_bat: bool, show
     }
 }
 
-/// Get preview from cache, or generate and cache it
+/// Cache-only lookup. Returns `Some(content)` if a sufficiently large preview
+/// is already cached for `path`, otherwise `None`. Callers can pair this with
+/// a placeholder render + background generation for non-blocking previews.
+pub fn preview_cache_get(path: &Path, max_lines: usize, cache: &PreviewCache) -> Option<String> {
+    let key = path.to_path_buf();
+    if let Ok(c) = cache.lock() {
+        if let Some((content, cached_lines)) = c.get(&key) {
+            if *cached_lines >= max_lines {
+                return Some(content.clone());
+            }
+        }
+    }
+    None
+}
+
+/// Get preview from cache, or generate and cache it (synchronous fallback;
+/// kept for callers that don't have a placeholder/poll mechanism).
 pub fn preview_cached(path: &Path, max_lines: usize, use_bat: bool, show_hidden: bool, cache: &PreviewCache) -> String {
     let key = path.to_path_buf();
     if let Ok(c) = cache.lock() {

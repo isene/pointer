@@ -72,6 +72,13 @@ pub struct App {
     pub dir_mtime: Option<std::time::SystemTime>,
     pub preload_busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub right_pane_locked: bool,
+    /// Set true by a background preview worker when it inserts a fresh entry
+    /// into `preview_cache`. The main loop checks this each tick and forces a
+    /// re-render of the right pane so the placeholder is replaced.
+    pub preview_dirty: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Paths currently being generated in the background; keyed so we don't
+    /// spawn redundant workers when the user oscillates over the same file.
+    pub preview_in_flight: std::sync::Arc<std::sync::Mutex<std::collections::HashSet<PathBuf>>>,
 }
 
 impl App {
@@ -139,6 +146,8 @@ impl App {
             dir_mtime: None,
             preload_busy: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             right_pane_locked: false,
+            preview_dirty: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            preview_in_flight: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
         };
 
         app.rebuild_panes();
@@ -381,24 +390,76 @@ impl App {
 
         if let Some(path) = selected_path {
             let max_lines = visible_height(&self.right);
-            let content = preview::preview_cached(&path, max_lines, self.config.bat, self.show_hidden, &self.preview_cache);
-            self.right.set_text(&content);
-            self.right.ix = 0;
-            self.right.full_refresh();
+            // Cache hit → render immediately; miss → render placeholder and
+            // spawn a worker that fills the cache and flips preview_dirty.
+            let cached = preview::preview_cache_get(&path, max_lines, &self.preview_cache);
+            if let Some(content) = cached {
+                self.right.set_text(&content);
+                self.right.ix = 0;
+                self.right.full_refresh();
+            } else {
+                self.right.set_text(&style::fg("  Loading preview…", 245));
+                self.right.ix = 0;
+                self.right.full_refresh();
+                self.spawn_preview(path.clone(), max_lines);
+            }
 
             // Show image if applicable
             self.show_image_if_applicable();
 
-            // Pre-load adjacent previews in background
+            // Pre-load adjacent previews in background (offsets ±1, ±2)
             self.preload_adjacent_previews(max_lines);
         }
+    }
+
+    /// Polled each tick from the main loop. When a background preview worker
+    /// has just inserted a fresh entry into `preview_cache`, swap the
+    /// "Loading…" placeholder for the real content. Force the prev-selection
+    /// reset so render_right repaints rather than short-circuiting.
+    pub fn check_preview(&mut self) {
+        use std::sync::atomic::Ordering;
+        if !self.preview_dirty.swap(false, Ordering::Relaxed) { return; }
+        // Force re-render of right pane: clear prev_selected so the
+        // selection-changed guard fires, then call render_right.
+        self.prev_selected = None;
+        self.render_right();
+    }
+
+    /// Spawn a background worker to generate the preview for `path` and
+    /// insert it into the cache, then flip `preview_dirty` so the main loop
+    /// re-renders the right pane and swaps the placeholder for the result.
+    fn spawn_preview(&self, path: PathBuf, max_lines: usize) {
+        use std::sync::atomic::Ordering;
+        // Skip if already in flight.
+        {
+            let mut flight = self.preview_in_flight.lock().unwrap();
+            if flight.contains(&path) { return; }
+            flight.insert(path.clone());
+        }
+        let cache = self.preview_cache.clone();
+        let in_flight = self.preview_in_flight.clone();
+        let dirty = self.preview_dirty.clone();
+        let use_bat = self.config.bat;
+        let show_hidden = self.show_hidden;
+        std::thread::spawn(move || {
+            let content = preview::preview(&path, max_lines, use_bat, show_hidden);
+            if let Ok(mut c) = cache.lock() {
+                if c.len() > 16 { c.clear(); }
+                c.insert(path.clone(), (content, max_lines));
+            }
+            in_flight.lock().unwrap().remove(&path);
+            dirty.store(true, Ordering::Relaxed);
+        });
     }
 
     fn preload_adjacent_previews(&self, max_lines: usize) {
         use std::sync::atomic::Ordering;
         if self.preload_busy.load(Ordering::Relaxed) { return; }
         let mut paths = Vec::new();
-        for offset in [1, 2, -1i32] {
+        // Include 0 so the very first cursor settle in a cold dir pre-warms
+        // its own preview (race with the spawn_preview path is fine — both
+        // check the cache and skip when already filled).
+        for offset in [0i32, 1, 2, -1] {
             let idx = self.index as i32 + offset;
             if idx >= 0 && (idx as usize) < self.files.len() {
                 let entry = &self.files[idx as usize];
