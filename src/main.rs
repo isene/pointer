@@ -78,6 +78,7 @@ fn main() {
     }
 
     Crust::init();
+    Crust::set_app_identity("Pointer");
 
     let mut app = app::App::new(fresh);
     app.pick_output = pick_output;
