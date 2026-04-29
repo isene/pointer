@@ -92,7 +92,6 @@ fn main() {
     loop {
         app.check_file_op();
         app.check_shell_cmd();
-        app.check_preview();
         // 2-second idle refresh (1s during async ops) to catch filesystem
         // changes and drain completed background shell commands.
         let timeout = if app.file_op_running() || app.shell_cmd_running() { Some(1) } else { Some(2) };
