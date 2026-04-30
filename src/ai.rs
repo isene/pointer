@@ -2,8 +2,48 @@ use crate::app::App;
 use crust::style;
 use std::process::Command;
 
+/// Dispatch a chat completion. Routes to Anthropic when model starts with
+/// `claude-`, otherwise OpenAI. Returns the assistant message text.
+fn ai_request(model: &str, key: &str, messages: &serde_json::Value) -> Option<String> {
+    if model.starts_with("claude-") {
+        let body = serde_json::json!({
+            "model": model,
+            "max_tokens": 1024,
+            "messages": messages,
+        });
+        let output = Command::new("curl")
+            .args(["-s", "-X", "POST", "https://api.anthropic.com/v1/messages",
+                   "-H", "content-type: application/json",
+                   "-H", "anthropic-version: 2023-06-01",
+                   "-H", &format!("x-api-key: {}", key),
+                   "-d", &body.to_string()])
+            .output().ok()?;
+        if !output.status.success() { return None; }
+        let response = String::from_utf8_lossy(&output.stdout);
+        let json: serde_json::Value = serde_json::from_str(&response).ok()?;
+        json["content"][0]["text"].as_str().map(String::from)
+    } else {
+        let body = serde_json::json!({
+            "model": model,
+            "messages": messages,
+            "max_tokens": 600,
+        });
+        let output = Command::new("curl")
+            .args(["-s", "-X", "POST", "https://api.openai.com/v1/chat/completions",
+                   "-H", "Content-Type: application/json",
+                   "-H", &format!("Authorization: Bearer {}", key),
+                   "-d", &body.to_string()])
+            .output().ok()?;
+        if !output.status.success() { return None; }
+        let response = String::from_utf8_lossy(&output.stdout);
+        let json: serde_json::Value = serde_json::from_str(&response).ok()?;
+        json["choices"][0]["message"]["content"].as_str().map(String::from)
+    }
+}
+
 impl App {
-    /// OpenAI file description (I key)
+    /// AI file description (I key). Routes to Anthropic or OpenAI based on
+    /// the configured model name (claude-* → Anthropic).
     pub fn ai_describe(&mut self) {
         if self.config.ai_key.is_empty() {
             self.msg_warn("Set ai_key in ~/.pointer/conf.json");
@@ -15,7 +55,6 @@ impl App {
 
         self.msg_info("Asking AI...");
 
-        // Build prompt
         let preview_text = crate::preview::preview(&path, 100, false, self.show_hidden);
         let plain = crust::strip_ansi(&preview_text);
         let context = if plain.len() > 2000 { &plain[..2000] } else { &plain };
@@ -25,32 +64,10 @@ impl App {
             name, context
         );
 
-        let body = serde_json::json!({
-            "model": self.config.ai_model,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 600
-        });
-
-        let output = Command::new("curl")
-            .args(["-s", "-X", "POST", "https://api.openai.com/v1/chat/completions",
-                   "-H", "Content-Type: application/json",
-                   "-H", &format!("Authorization: Bearer {}", self.config.ai_key),
-                   "-d", &body.to_string()])
-            .output();
-
-        match output {
-            Ok(o) if o.status.success() => {
-                let response = String::from_utf8_lossy(&o.stdout);
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
-                    let content = json["choices"][0]["message"]["content"]
-                        .as_str()
-                        .unwrap_or("No response");
-                    self.show_in_right(content);
-                } else {
-                    self.msg_error("Failed to parse AI response");
-                }
-            }
-            _ => self.msg_error("AI request failed"),
+        let messages = serde_json::json!([{"role": "user", "content": prompt}]);
+        match ai_request(&self.config.ai_model, &self.config.ai_key, &messages) {
+            Some(content) => self.show_in_right(&content),
+            None => self.msg_error("AI request failed"),
         }
     }
 
@@ -68,42 +85,22 @@ impl App {
 
             history.push(serde_json::json!({"role": "user", "content": input}));
 
-            let body = serde_json::json!({
-                "model": self.config.ai_model,
-                "messages": history,
-                "max_tokens": 600
-            });
-
-            let output = Command::new("curl")
-                .args(["-s", "-X", "POST", "https://api.openai.com/v1/chat/completions",
-                       "-H", "Content-Type: application/json",
-                       "-H", &format!("Authorization: Bearer {}", self.config.ai_key),
-                       "-d", &body.to_string()])
-                .output();
-
-            match output {
-                Ok(o) if o.status.success() => {
-                    let response = String::from_utf8_lossy(&o.stdout);
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
-                        let content = json["choices"][0]["message"]["content"]
-                            .as_str()
-                            .unwrap_or("No response")
-                            .to_string();
-                        history.push(serde_json::json!({"role": "assistant", "content": content}));
-                        // Show full conversation in right pane
-                        let display: Vec<String> = history.iter().map(|m| {
-                            let role = m["role"].as_str().unwrap_or("");
-                            let text = m["content"].as_str().unwrap_or("");
-                            if role == "user" {
-                                format!("{}: {}", style::fg("You", 81), text)
-                            } else {
-                                format!("{}: {}", style::fg("AI", 46), text)
-                            }
-                        }).collect();
-                        self.show_in_right(&display.join("\n\n"));
-                    }
+            let messages = serde_json::Value::Array(history.clone());
+            match ai_request(&self.config.ai_model, &self.config.ai_key, &messages) {
+                Some(content) => {
+                    history.push(serde_json::json!({"role": "assistant", "content": content}));
+                    let display: Vec<String> = history.iter().map(|m| {
+                        let role = m["role"].as_str().unwrap_or("");
+                        let text = m["content"].as_str().unwrap_or("");
+                        if role == "user" {
+                            format!("{}: {}", style::fg("You", 81), text)
+                        } else {
+                            format!("{}: {}", style::fg("AI", 46), text)
+                        }
+                    }).collect();
+                    self.show_in_right(&display.join("\n\n"));
                 }
-                _ => { self.msg_error("AI request failed"); break; }
+                None => { self.msg_error("AI request failed"); break; }
             }
         }
     }
