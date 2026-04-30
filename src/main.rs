@@ -136,8 +136,8 @@ fn main() {
             // --- MOTION ---
             "j" | "DOWN" | "C-DOWN" => { app.move_down(); app.render(); }
             "k" | "UP" | "C-UP" => { app.move_up(); app.render(); }
-            "h" | "LEFT" | "C-LEFT" | "BACK" => { app.go_up_dir(); app.reload_and_render(); }
-            "l" | "RIGHT" | "C-RIGHT" => { app.enter(); app.reload_and_render(); }
+            "h" | "LEFT" | "C-LEFT" | "BACK" => { app.go_up_dir(); app.force_render_all(); }
+            "l" | "RIGHT" | "C-RIGHT" => { app.enter(); app.force_render_all(); }
             "x" => { app.open_selected_force(); app.render(); }
             "PgDOWN" => { app.page_down(); app.render(); }
             "PgUP" => { app.page_up(); app.render(); }
@@ -147,9 +147,9 @@ fn main() {
             // --- MARKS ---
             "m" => { app.set_mark(); }
             "M" => { app.show_marks(); }
-            "'" => { app.jump_to_mark(); app.reload_and_render(); }
-            "~" => { app.go_home(); app.reload_and_render(); }
-            ">" => { app.follow_symlink(); app.reload_and_render(); }
+            "'" => { app.jump_to_mark(); app.force_render_all(); }
+            "~" => { app.go_home(); app.force_render_all(); }
+            ">" => { app.follow_symlink(); app.force_render_all(); }
 
             // --- VIEW ---
             "a" => { app.toggle_hidden(); app.reload_and_render(); }

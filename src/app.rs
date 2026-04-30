@@ -428,6 +428,18 @@ impl App {
         }
     }
 
+    /// Full re-render after a navigation event (cd, jump-to-mark, go-up,
+    /// follow-symlink, etc.). Differs from `reload_and_render` in that it
+    /// does NOT call `load_dir` — the navigation method already did — and
+    /// always force-refreshes the right pane regardless of path comparison.
+    /// Use this whenever cwd has just changed.
+    pub fn force_render_all(&mut self) {
+        self.clear_image();
+        self.prev_selected = None;
+        self.right_pane_locked = false;
+        self.render();
+    }
+
     /// Set right pane text (clears image and old content first)
     pub fn show_in_right(&mut self, text: &str) {
         self.clear_image();
