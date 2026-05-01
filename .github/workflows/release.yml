@@ -45,6 +45,12 @@ jobs:
           repository: isene/glow
           path: glow
 
+      - name: Checkout highlight
+        uses: actions/checkout@v4
+        with:
+          repository: isene/highlight
+          path: highlight
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
