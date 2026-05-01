@@ -53,14 +53,29 @@ impl SortMode {
     }
 }
 
-/// Parse LS_COLORS env var into a map
+/// Parse LS_COLORS env var into a map. When the env var is missing or empty
+/// (common when pointer is launched via `--pick` from another tool whose
+/// own parent never sourced a shell profile), fall back to running
+/// `dircolors -b` which prints the system default. Without this fallback
+/// the pick view shows no file-type colors at all.
 pub fn parse_ls_colors() -> HashMap<String, String> {
     let mut map = HashMap::new();
-    if let Ok(val) = std::env::var("LS_COLORS") {
-        for entry in val.split(':') {
-            if let Some((key, code)) = entry.split_once('=') {
-                map.insert(key.to_string(), code.to_string());
-            }
+    let val = std::env::var("LS_COLORS").unwrap_or_default();
+    let val = if val.len() < 32 {
+        // Short or empty: try `dircolors -b` to get the system default.
+        std::process::Command::new("dircolors").arg("-b").output().ok()
+            .and_then(|o| {
+                let out = String::from_utf8_lossy(&o.stdout);
+                // dircolors prints e.g. `LS_COLORS='...';\nexport LS_COLORS`
+                let start = out.find('\'')?;
+                let end = out[start+1..].find('\'')?;
+                Some(out[start+1..start+1+end].to_string())
+            })
+            .unwrap_or(val)
+    } else { val };
+    for entry in val.split(':') {
+        if let Some((key, code)) = entry.split_once('=') {
+            map.insert(key.to_string(), code.to_string());
         }
     }
     map
