@@ -6,7 +6,6 @@ use std::sync::{Arc, Mutex};
 use crust::style;
 
 use crate::entry::format_size;
-use crate::highlight;
 
 const LARGE_FILE_HIGHLIGHT_LIMIT: u64 = 1_000_000;  // 1MB: skip highlighting
 const LARGE_FILE_PREVIEW_LIMIT: u64 = 10_000_000;   // 10MB: show size only

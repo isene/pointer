@@ -6,7 +6,6 @@ mod config;
 mod entry;
 mod git;
 mod help;
-mod highlight;
 mod image;
 mod marks;
 mod ops;

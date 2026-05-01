@@ -77,7 +77,7 @@ pub struct App {
 impl App {
     pub fn new(fresh: bool) -> Self {
         let config = Config::load();
-        crate::highlight::set_theme(&config.syntax_theme);
+        highlight::set_theme(&config.syntax_theme);
         let state = State::load();
         let (cols, rows) = Crust::terminal_size();
         let ls_colors = entry::parse_ls_colors();
@@ -873,7 +873,7 @@ impl App {
 
     pub fn show_config(&mut self) {
         use crust::Input;
-        let themes = crate::highlight::available_themes();
+        let themes = highlight::available_themes();
         let sort_modes = ["name", "size", "time", "ext"];
         let border_modes = ["0: none", "1: right", "2: both", "3: left"];
 
@@ -967,7 +967,7 @@ impl App {
                 "t" => {
                     let next = (theme_idx + 1) % themes.len();
                     self.config.syntax_theme = themes[next].to_string();
-                    crate::highlight::set_theme(themes[next]);
+                    highlight::set_theme(themes[next]);
                     preview::clear_cache(&self.preview_cache);
                 }
                 "h" => {

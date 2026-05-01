@@ -1,6 +1,6 @@
 [package]
 name = "pointer"
-version = "0.1.43"
+version = "0.1.44"
 edition = "2021"
 authors = ["Geir Isene <g@isene.com>"]
 description = "Fast terminal file manager. Feature clone of RTFM, built on crust."
@@ -10,7 +10,9 @@ repository = "https://github.com/isene/pointer"
 [dependencies]
 crust = { version = "0.1", path = "../crust", package = "fe2o3-crust" }
 glow = { version = "0.1", path = "../glow", package = "fe2o3-glow" }
-# Note: fe2o3-crust exports as "crust", fe2o3-glow exports as "glow" via [lib] name
+highlight = { version = "0.1", path = "../highlight", package = "fe2o3-highlight" }
+# Note: fe2o3-crust exports as "crust", fe2o3-glow exports as "glow",
+# fe2o3-highlight exports as "highlight" via [lib] name
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
