@@ -381,7 +381,10 @@ impl App {
 
         if let Some(path) = selected_path {
             let max_lines = visible_height(&self.right);
-            let content = preview::preview_cached(&path, max_lines, self.config.bat, self.show_hidden, &self.preview_cache);
+            let content = preview::preview_cached(
+                &path, max_lines, self.config.bat, self.show_hidden,
+                self.sort_mode, self.sort_invert, &self.preview_cache,
+            );
             self.right.set_text(&content);
             self.right.ix = 0;
             self.right.full_refresh();
@@ -411,10 +414,12 @@ impl App {
         let cache = self.preview_cache.clone();
         let use_bat = self.config.bat;
         let show_hidden = self.show_hidden;
+        let sort_mode = self.sort_mode;
+        let sort_invert = self.sort_invert;
         let busy = self.preload_busy.clone();
         busy.store(true, Ordering::Relaxed);
         std::thread::spawn(move || {
-            preview::preload_adjacent(&paths, max_lines, use_bat, show_hidden, &cache);
+            preview::preload_adjacent(&paths, max_lines, use_bat, show_hidden, sort_mode, sort_invert, &cache);
             busy.store(false, Ordering::Relaxed);
         });
     }
@@ -776,11 +781,15 @@ impl App {
 
     pub fn cycle_sort(&mut self) {
         self.sort_mode = self.sort_mode.next();
+        // Preview cache keys on path only; the right pane would otherwise
+        // keep showing the previous sort's order until the dir is re-entered.
+        if let Ok(mut c) = self.preview_cache.lock() { c.clear(); }
         self.load_dir();
     }
 
     pub fn toggle_sort_invert(&mut self) {
         self.sort_invert = !self.sort_invert;
+        if let Ok(mut c) = self.preview_cache.lock() { c.clear(); }
         self.load_dir();
     }
 

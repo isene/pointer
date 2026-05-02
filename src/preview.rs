@@ -22,14 +22,21 @@ pub fn clear_cache(cache: &PreviewCache) {
 }
 
 /// Pre-generate previews for adjacent files (call from background)
-pub fn preload_adjacent(paths: &[PathBuf], max_lines: usize, use_bat: bool, show_hidden: bool, cache: &PreviewCache) {
+pub fn preload_adjacent(
+    paths: &[PathBuf],
+    max_lines: usize,
+    use_bat: bool,
+    show_hidden: bool,
+    sort_mode: crate::entry::SortMode,
+    sort_invert: bool,
+    cache: &PreviewCache,
+) {
     for path in paths {
         let key = path.clone();
-        // Skip if already cached
         if let Ok(c) = cache.lock() {
             if c.contains_key(&key) { continue; }
         }
-        let content = preview(path, max_lines, use_bat, show_hidden);
+        let content = preview(path, max_lines, use_bat, show_hidden, sort_mode, sort_invert);
         if let Ok(mut c) = cache.lock() {
             c.insert(key, (content, max_lines));
         }
@@ -37,7 +44,15 @@ pub fn preload_adjacent(paths: &[PathBuf], max_lines: usize, use_bat: bool, show
 }
 
 /// Get preview from cache, or generate and cache it
-pub fn preview_cached(path: &Path, max_lines: usize, use_bat: bool, show_hidden: bool, cache: &PreviewCache) -> String {
+pub fn preview_cached(
+    path: &Path,
+    max_lines: usize,
+    use_bat: bool,
+    show_hidden: bool,
+    sort_mode: crate::entry::SortMode,
+    sort_invert: bool,
+    cache: &PreviewCache,
+) -> String {
     let key = path.to_path_buf();
     if let Ok(c) = cache.lock() {
         if let Some((content, cached_lines)) = c.get(&key) {
@@ -46,7 +61,7 @@ pub fn preview_cached(path: &Path, max_lines: usize, use_bat: bool, show_hidden:
             }
         }
     }
-    let content = preview(path, max_lines, use_bat, show_hidden);
+    let content = preview(path, max_lines, use_bat, show_hidden, sort_mode, sort_invert);
     if let Ok(mut c) = cache.lock() {
         // Keep cache small
         if c.len() > 16 { c.clear(); }
@@ -56,39 +71,67 @@ pub fn preview_cached(path: &Path, max_lines: usize, use_bat: bool, show_hidden:
 }
 
 /// Generate preview content for right pane
-pub fn preview(path: &Path, max_lines: usize, use_bat: bool, show_hidden: bool) -> String {
+pub fn preview(
+    path: &Path,
+    max_lines: usize,
+    use_bat: bool,
+    show_hidden: bool,
+    sort_mode: crate::entry::SortMode,
+    sort_invert: bool,
+) -> String {
     if path.is_dir() {
-        return preview_dir(path, show_hidden);
+        return preview_dir(path, show_hidden, sort_mode, sort_invert);
     }
     preview_file(path, max_lines, use_bat)
 }
 
-fn preview_dir(path: &Path, show_hidden: bool) -> String {
-    // Use ls with same sorting as left pane: dirs first, alphabetical, LS_COLORS
-    let mut args = vec!["--color=always", "-1", "--group-directories-first", "-p"];
-    if show_hidden {
-        args.push("-a");
+/// Render a directory listing for the right-pane preview using the SAME
+/// sort + filter rules as the left pane (`entry::load_dir`). Previously
+/// this used `ls --group-directories-first` which honors neither the
+/// user's chosen sort mode (Size / Time / Extension) nor case-insensitive
+/// name compare nor the invert toggle — so navigating into a previewed
+/// dir would show items in a different order from the preview.
+fn preview_dir(
+    path: &Path,
+    show_hidden: bool,
+    sort_mode: crate::entry::SortMode,
+    sort_invert: bool,
+) -> String {
+    let ls_colors = crate::entry::parse_ls_colors();
+    let entries = crate::entry::load_dir(
+        path, show_hidden, sort_mode, sort_invert, &ls_colors, &[],
+    );
+    if entries.is_empty() {
+        // Fallback path for permission-denied / missing-dir cases.
+        let Ok(items) = fs::read_dir(path) else {
+            return "Cannot read directory".into();
+        };
+        let mut names: Vec<String> = items
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+        names.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        return names.join("\n");
     }
-    let output = Command::new("ls")
-        .args(&args)
-        .arg(path)
-        .output();
-    match output {
-        Ok(o) if o.status.success() => {
-            String::from_utf8_lossy(&o.stdout).to_string()
+    // Emit one entry per line: LS_COLORS-colored name + trailing classifier
+    // (`/` for dirs, `@` for symlinks, `*` for executables) so the preview
+    // looks like the left pane.
+    let mut out = String::with_capacity(entries.len() * 32);
+    for (i, e) in entries.iter().enumerate() {
+        // entry::color_for returns the FULL SGR sequence (`\x1b[…m`) — we
+        // were double-wrapping it before, which printed the literal codes
+        // as text.
+        out.push_str(&e.color_code);
+        out.push_str(&e.name);
+        if !e.color_code.is_empty() {
+            out.push_str("\x1b[0m");
         }
-        _ => {
-            let Ok(entries) = fs::read_dir(path) else {
-                return "Cannot read directory".into();
-            };
-            let mut items: Vec<String> = entries
-                .flatten()
-                .map(|e| e.file_name().to_string_lossy().to_string())
-                .collect();
-            items.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
-            items.join("\n")
-        }
+        if e.is_dir { out.push('/'); }
+        else if e.is_symlink { out.push('@'); }
+        else if e.is_exec { out.push('*'); }
+        if i + 1 < entries.len() { out.push('\n'); }
     }
+    out
 }
 
 fn preview_file(path: &Path, max_lines: usize, use_bat: bool) -> String {

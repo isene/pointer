@@ -55,7 +55,9 @@ impl App {
 
         self.msg_info("Asking AI...");
 
-        let preview_text = crate::preview::preview(&path, 100, false, self.show_hidden);
+        let preview_text = crate::preview::preview(
+            &path, 100, false, self.show_hidden, self.sort_mode, self.sort_invert,
+        );
         let plain = crust::strip_ansi(&preview_text);
         let context = if plain.len() > 2000 { &plain[..2000] } else { &plain };
 
