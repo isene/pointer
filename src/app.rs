@@ -71,6 +71,10 @@ pub struct App {
     pub preview_cache: crate::preview::PreviewCache,
     pub dir_mtime: Option<std::time::SystemTime>,
     pub preload_busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Set to true to ask the background image-precache worker to
+    /// bail at the next path boundary (e.g. when the user cd's away
+    /// before the previous dir's precache is done).
+    pub preload_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub right_pane_locked: bool,
 }
 
@@ -138,6 +142,7 @@ impl App {
             preview_cache: crate::preview::new_cache(),
             dir_mtime: None,
             preload_busy: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            preload_cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             right_pane_locked: false,
         };
 
@@ -202,6 +207,14 @@ impl App {
         // Track dir mtime for idle skip
         self.dir_mtime = std::fs::metadata(&cwd).ok()
             .and_then(|m| m.modified().ok());
+
+        // Fire-and-forget: precache every image in the new dir into
+        // glow's PngCache, proximity-ordered to the current cursor.
+        // First-show after navigating any cached entry is then just a
+        // base64-encode + place — no convert / pad subprocess. Skips
+        // immediately when image_display is off or the right pane is
+        // zero-sized (startup before geometry settles).
+        self.precache_dir_images();
     }
 
     /// Check if directory has changed since last load

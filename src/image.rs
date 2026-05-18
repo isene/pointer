@@ -12,6 +12,9 @@ impl App {
             self.image_display = Some(glow::Display::new());
             if self.image_display.as_ref().map(|d| d.supported()).unwrap_or(false) {
                 self.msg_success("Image preview: on");
+                // Catch up: enabling mid-dir, kick the full precache
+                // so the rest of the dir is hot when the cursor moves.
+                self.precache_dir_images();
             } else {
                 self.msg_warn("Image preview: no supported protocol");
             }
@@ -65,7 +68,25 @@ impl App {
         self.right.set_text("");
         self.right.full_refresh();
 
-        display.show(&shown_path, self.right.x, self.right.y, self.right.w, self.right.h);
+        // Kitty pipeline forks `convert` for the initial resize and
+        // for the cell-alignment pad step. Either subprocess can fail
+        // transiently under resource pressure — most often while the
+        // background `preconvert_adjacent_images` thread is also
+        // forking `convert` on neighbouring images. `display.show`
+        // returns false on any such failure; the image silently fails
+        // to appear until the user presses Enter (which re-runs the
+        // same call when the contention's gone).
+        //
+        // Retry once with a small delay — cheap insurance that catches
+        // the ~1/20 race without affecting the happy path.
+        let x = self.right.x;
+        let y = self.right.y;
+        let w = self.right.w;
+        let h = self.right.h;
+        if !display.show(&shown_path, x, y, w, h) {
+            std::thread::sleep(std::time::Duration::from_millis(30));
+            let _ = display.show(&shown_path, x, y, w, h);
+        }
 
         self.preconvert_adjacent_images();
     }
@@ -133,7 +154,73 @@ impl App {
                     all_paths.push(tn.to_string_lossy().to_string());
                 }
             }
-            glow::preconvert_images(&all_paths, pixel_w, pixel_h, &cache);
+            glow::preconvert_images(&all_paths, pixel_w, pixel_h,
+                                    cell_w, cell_h, &cache, None);
+            busy.store(false, Ordering::Relaxed);
+        });
+    }
+
+    /// Walk the whole current directory in proximity-to-cursor order
+    /// and background-precache every image into glow's PngCache,
+    /// cell-aligned and ready to transmit. Triggered on directory
+    /// change. Cancellable: setting `preload_cancel` makes the
+    /// worker thread bail at the next path boundary so a fresh
+    /// `cd` doesn't keep grinding through the old dir's tail.
+    pub fn precache_dir_images(&self) {
+        use std::sync::atomic::Ordering;
+
+        let Some(ref display) = self.image_display else { return };
+        if !display.supported() { return; }
+
+        let (cell_w, cell_h) = glow::get_cell_size();
+        if cell_w == 0 || cell_h == 0 { return; }
+        let pixel_w = self.right.w as u32 * cell_w as u32;
+        let pixel_h = self.right.h as u32 * cell_h as u32;
+        if pixel_w == 0 || pixel_h == 0 { return; }
+
+        // Ask any in-flight precache to stop. The new spawn below
+        // will set cancel = false again right before launching, so
+        // the prior thread observes "stop" while ours observes "go".
+        self.preload_cancel.store(true, Ordering::Relaxed);
+
+        // Don't start a second worker on top of one already running;
+        // it would race on the cancel flag. If a prior worker is
+        // mid-convert, we let it finish that one image and notice
+        // the cancel — but we skip starting our own this tick. The
+        // next selection/render tick will retry naturally.
+        if self.preload_busy.load(Ordering::Relaxed) { return; }
+
+        let cwd = std::env::current_dir().unwrap_or_default();
+        let center = self.index;
+        let mut ranked: Vec<(usize, String)> = Vec::new();
+        for (idx, entry) in self.files.iter().enumerate() {
+            let ext = entry.path.extension().and_then(|x| x.to_str()).unwrap_or("");
+            if !is_image_ext(ext) { continue; }
+            let p = if entry.path.is_absolute() {
+                entry.path.clone()
+            } else {
+                cwd.join(&entry.path)
+            };
+            let dist = if idx >= center { idx - center } else { center - idx };
+            ranked.push((dist, p.to_string_lossy().to_string()));
+        }
+        // Cap the work: dirs with > 200 images get the closest 200
+        // around the cursor. Beyond that the user is unlikely to
+        // scroll-through-all in a session, and we don't want a
+        // 10000-image gallery pinning a CPU core for minutes.
+        ranked.sort_by_key(|(d, _)| *d);
+        ranked.truncate(200);
+        if ranked.is_empty() { return; }
+        let paths: Vec<String> = ranked.into_iter().map(|(_, p)| p).collect();
+
+        let cache = display.png_cache.clone();
+        let busy = self.preload_busy.clone();
+        let cancel = self.preload_cancel.clone();
+        cancel.store(false, Ordering::Relaxed); // arm for this run
+        busy.store(true, Ordering::Relaxed);
+        std::thread::spawn(move || {
+            glow::preconvert_images(&paths, pixel_w, pixel_h,
+                                    cell_w, cell_h, &cache, Some(&cancel));
             busy.store(false, Ordering::Relaxed);
         });
     }
