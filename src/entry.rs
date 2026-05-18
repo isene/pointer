@@ -53,25 +53,28 @@ impl SortMode {
     }
 }
 
-/// Parse LS_COLORS env var into a map. When the env var is missing or empty
-/// (common when pointer is launched via `--pick` from another tool whose
-/// own parent never sourced a shell profile), fall back to running
-/// `dircolors -b` which prints the system default. Without this fallback
-/// the pick view shows no file-type colors at all.
+/// Parse LS_COLORS env var into a map. When the env var is missing or
+/// short (common when pointer is launched via `--pick` from another
+/// tool whose own parent never sourced a shell profile), walk a
+/// priority chain of fallback sources so the user's actual palette is
+/// found regardless of how pointer got invoked:
+///
+/// 1. `$LS_COLORS` env var (if it has any real content)
+/// 2. `~/.local/share/lscolors.sh` — XDG-standard output location for
+///    `vivid generate`, `dircolors -p > …`, etc. Shell-export shape:
+///    `LS_COLORS='…';\nexport LS_COLORS`. Same parser as dircolors.
+/// 3. `~/.dircolors` via `dircolors -b ~/.dircolors` (matches the
+///    pattern in the default ~/.bashrc).
+/// 4. `dircolors -b` system default (last-resort, ~1.7 KB of basics).
+///
+/// Without this chain, file lists in `--pick` mode showed only the
+/// 16-color system default even when the user had a rich custom
+/// palette installed.
 pub fn parse_ls_colors() -> HashMap<String, String> {
     let mut map = HashMap::new();
     let val = std::env::var("LS_COLORS").unwrap_or_default();
     let val = if val.len() < 32 {
-        // Short or empty: try `dircolors -b` to get the system default.
-        std::process::Command::new("dircolors").arg("-b").output().ok()
-            .and_then(|o| {
-                let out = String::from_utf8_lossy(&o.stdout);
-                // dircolors prints e.g. `LS_COLORS='...';\nexport LS_COLORS`
-                let start = out.find('\'')?;
-                let end = out[start+1..].find('\'')?;
-                Some(out[start+1..start+1+end].to_string())
-            })
-            .unwrap_or(val)
+        load_ls_colors_fallback().unwrap_or(val)
     } else { val };
     for entry in val.split(':') {
         if let Some((key, code)) = entry.split_once('=') {
@@ -79,6 +82,47 @@ pub fn parse_ls_colors() -> HashMap<String, String> {
         }
     }
     map
+}
+
+/// Pick the best available LS_COLORS source when the env var is empty.
+/// Returns the raw colon-separated body (no surrounding quotes).
+fn load_ls_colors_fallback() -> Option<String> {
+    // 1. ~/.local/share/lscolors.sh
+    if let Some(home) = std::env::var_os("HOME") {
+        let path = std::path::Path::new(&home).join(".local/share/lscolors.sh");
+        if let Ok(txt) = std::fs::read_to_string(&path) {
+            if let Some(body) = unquote_lscolors(&txt) {
+                return Some(body);
+            }
+        }
+        // 2. ~/.dircolors via dircolors -b ~/.dircolors
+        let dircolors_path = std::path::Path::new(&home).join(".dircolors");
+        if dircolors_path.is_file() {
+            if let Some(body) = run_dircolors(Some(&dircolors_path)) {
+                return Some(body);
+            }
+        }
+    }
+    // 3. plain `dircolors -b`
+    run_dircolors(None)
+}
+
+/// Run `dircolors -b [path]` and extract the body from its shell-export
+/// stdout. Returns None on any error.
+fn run_dircolors(path: Option<&std::path::Path>) -> Option<String> {
+    let mut cmd = std::process::Command::new("dircolors");
+    cmd.arg("-b");
+    if let Some(p) = path { cmd.arg(p); }
+    let out = cmd.output().ok()?;
+    let s = String::from_utf8_lossy(&out.stdout);
+    unquote_lscolors(&s)
+}
+
+/// Pull the colon-separated body out of a `LS_COLORS='…';` shell line.
+fn unquote_lscolors(s: &str) -> Option<String> {
+    let start = s.find('\'')?;
+    let end = s[start+1..].find('\'')?;
+    Some(s[start+1..start+1+end].to_string())
 }
 
 /// Get ANSI color code for a DirEntry
