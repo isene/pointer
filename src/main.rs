@@ -21,6 +21,12 @@ use crust::{Crust, Input};
 fn main() {
     config::ensure_dirs();
 
+    // Panic hook: write trace + backtrace to ~/.pointer/crash.log so
+    // a crash inside the alt screen leaves a usable forensic trail.
+    // Without this, panic output is eaten by the terminal teardown
+    // sequence and the user just sees pointer vanish.
+    install_crash_logger();
+
     // Parse --pick argument, --fresh flag, and an optional positional path.
     // The positional path may be a directory (cd there) or a file (cd into
     // its parent and select the file). `~` is expanded from $HOME.
@@ -273,4 +279,48 @@ fn main() {
     }
 
     Crust::cleanup();
+}
+
+/// Write panic location + message + backtrace to ~/.pointer/crash.log
+/// and also dump to stderr in case the crash leaves the terminal in a
+/// state where stderr is still visible. Then restore the terminal
+/// (deactivate alt screen, show cursor) before the process exits, so
+/// the user doesn't end up with a half-painted terminal.
+fn install_crash_logger() {
+    use std::io::Write;
+    // Enable backtrace by default unless the user has explicitly set it.
+    if std::env::var_os("RUST_BACKTRACE").is_none() {
+        unsafe { std::env::set_var("RUST_BACKTRACE", "1"); }
+    }
+    std::panic::set_hook(Box::new(|info| {
+        // Restore the terminal first so the crash report is readable.
+        Crust::cleanup();
+
+        let home = std::env::var_os("HOME")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_default();
+        let log_path = home.join(".pointer").join("crash.log");
+        let _ = std::fs::create_dir_all(log_path.parent().unwrap());
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let bt = std::backtrace::Backtrace::force_capture();
+        let report = format!(
+            "─── pointer crash @ unix={} ───\npointer v{}\n{}\n\nbacktrace:\n{}\n",
+            now,
+            env!("CARGO_PKG_VERSION"),
+            info,
+            bt,
+        );
+
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .append(true).create(true).open(&log_path)
+        {
+            let _ = f.write_all(report.as_bytes());
+        }
+        eprintln!("{}", report);
+        eprintln!("pointer: full trace written to {}", log_path.display());
+    }));
 }
