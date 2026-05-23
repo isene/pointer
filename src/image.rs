@@ -25,6 +25,21 @@ impl App {
     /// Show image if selected file is an image (or a video, via
     /// ffmpegthumbnailer frame extraction) and display is active.
     pub fn show_image_if_applicable(&mut self) {
+        // Burst suppression. On rapid Up/Down (key autorepeat), each
+        // keystroke pushes a kitty transmit-plus-place down the pty.
+        // Even with monotonic ids and the double-tap place, kitty's
+        // input buffer can back up enough that a chunked transmit
+        // hasn't finished assembling when the next clear arrives —
+        // the image briefly appears then vanishes, or never appears.
+        // Skip the show entirely while there's another key already
+        // waiting in the queue. The render after the LAST key in the
+        // burst will paint the actual image. Saves a lot of kitty
+        // bandwidth too: typing through a 50-file directory used to
+        // stream 50 PNGs the user never sees.
+        if crust::Input::peek_pending() {
+            return;
+        }
+
         let Some(ref mut display) = self.image_display else { return };
         if !display.supported() { return; }
 
