@@ -148,7 +148,7 @@ Plugins: `~/.pointer/plugins/`
   "interactive": ["vim", "less", "top", "htop", "fzf", "navi"],
   "c_top_fg": 0, "c_top_bg": 249,
   "c_status_fg": 252, "c_status_bg": 236,
-  "topmatch": [["PassionFruit", 171], ["Dualog", 72], ["", 249]],
+  "topmatch": [["Projects", 171], ["Work", 72], ["", 249]],
   "ai_key": "",
   "ai_model": "gpt-4o-mini",
   "syntax_theme": "monokai",
