@@ -24,6 +24,7 @@ impl App {
             } else {
                 self.msg_warn(&format!("Mark '{}' not set", del_key));
             }
+            self.show_marks_display(); // refresh the right-pane list immediately
             return;
         }
 
@@ -33,6 +34,7 @@ impl App {
         let cwd = env::current_dir().unwrap_or_default();
         self.state.marks.insert(key.clone(), cwd.to_string_lossy().to_string());
         self.msg_success(&format!("Mark '{}' set", ch));
+        self.show_marks_display(); // refresh the right-pane list so the new mark shows at once
     }
 
     /// Show marks in right pane, then wait for a key to jump immediately
