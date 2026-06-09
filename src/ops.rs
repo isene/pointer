@@ -292,33 +292,9 @@ impl App {
         // Remember current file name for index restoration after delete
         let current_name = self.files.get(self.index).map(|e| e.name.clone());
 
-        // Show tagged items info in right pane like RTFM
-        let total_size: u64 = items.iter()
-            .filter_map(|p| fs::metadata(p).ok())
-            .map(|m| m.len())
-            .sum();
-        let mut info_lines = vec![
-            style::fg("Flagged for deletion", 196),
-            "=".repeat(50),
-            String::new(),
-            style::fg("Summary:", 46),
-            format!("  Items:      {}", items.len()),
-            format!("  Total size: {:.2} MB", total_size as f64 / 1_000_000.0),
-            String::new(),
-        ];
-        if items.is_empty() {
-            info_lines.push(style::fg("No tagged items", 245));
-        } else {
-            for p in &items {
-                info_lines.push(format!("  {}", p.file_name().unwrap_or_default().to_string_lossy()));
-            }
-        }
-        info_lines.push(String::new());
-        info_lines.push(format!("Currently selected:"));
-        if let Some(entry) = self.files.get(self.index) {
-            info_lines.push(format!("  \u{2192} {}", entry.name));
-        }
-        self.show_in_right(&info_lines.join("\n"));
+        // (No right-pane summary — the flagged items are already shown in
+        // dark red in the left pane, and a one-frame flash on purge is just
+        // noise.)
 
         // Optional single-key confirm (config `confirm_delete`, default on).
         // Off → `d d d <` purges with no prompt (trash is the safety net).
@@ -385,9 +361,9 @@ impl App {
                 }
             }
         }
-        // Force right pane clear + re-render to prevent artifacts from delete dialog
-        self.right.clear();
-        self.force_render_right();
+        // The caller (`<`) follows with reload_and_render, which repaints
+        // the right pane for the new selection — no clear needed here (a
+        // clear would just flash the pane blank first).
     }
 
     /// Rename current item
