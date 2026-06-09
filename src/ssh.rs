@@ -110,6 +110,7 @@ impl App {
                 gid: 0,
                 color_code: if is_dir { "\x1b[38;5;12m".into() } else { String::new() },
                 tagged: false,
+                delete_marked: false,
                 search_hit: false,
             });
         }

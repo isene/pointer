@@ -18,6 +18,7 @@ pub struct DirEntry {
     pub gid: u32,
     pub color_code: String,
     pub tagged: bool,
+    pub delete_marked: bool,
     pub search_hit: bool,
 }
 
@@ -168,9 +169,11 @@ pub fn load_dir(
     sort_invert: bool,
     ls_colors: &HashMap<String, String>,
     tagged_paths: &[PathBuf],
+    delete_paths: &[PathBuf],
 ) -> Vec<DirEntry> {
     let mut entries = Vec::new();
     let tagged_set: std::collections::HashSet<&PathBuf> = tagged_paths.iter().collect();
+    let delete_set: std::collections::HashSet<&PathBuf> = delete_paths.iter().collect();
 
     let Ok(read_dir) = fs::read_dir(dir) else { return entries };
 
@@ -189,6 +192,7 @@ pub fn load_dir(
             let is_exec = !is_dir && meta.permissions().mode() & 0o111 != 0;
             let path = e.path();
             let tagged = tagged_set.contains(&path);
+            let delete_marked = delete_set.contains(&path);
             let mut entry = DirEntry {
                 name,
                 path,
@@ -202,6 +206,7 @@ pub fn load_dir(
                 gid: meta.gid(),
                 color_code: String::new(),
                 tagged,
+                delete_marked,
                 search_hit: false,
             };
             entry.color_code = color_for(&entry, ls_colors);

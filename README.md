@@ -77,6 +77,15 @@ Press `?` for built-in help. Press `q` to quit (saves state).
 
 ![Keyboard reference](img/pointer-kb.svg)
 
+> **Deletion is a two-step flag-then-purge** (same convention as
+> [kastrup](https://github.com/isene/kastrup), so muscle memory carries
+> between the two): press **`d`** to *flag* the current item (or all
+> tagged items) for deletion — flagged entries render in dark red with a
+> `D` prefix and `d` toggles the flag off. Nothing is removed until you
+> press **`<`** to *purge* every flagged item (with a single-key confirm,
+> moving to trash when enabled). So `t` to tag, `d` to flag, `<` to purge.
+> `d` is now safe to press by reflex — it never deletes on its own.
+
 ### Quick Reference
 
 | Key | Action | Key | Action |
@@ -99,7 +108,8 @@ Press `?` for built-in help. Press `q` to quit (saves state).
 | **File Ops** | | **Tabs** | |
 | p | Copy here | ] / [ | New / close tab |
 | P | Move here | J/K | Prev/next tab |
-| d | Delete | 1-9 | Switch to tab |
+| d | Flag for deletion | 1-9 | Switch to tab |
+| < | Purge (delete flagged) | | |
 | c | Rename | { / } | Rename / duplicate |
 | s | Create symlink | **Command** | |
 | = | Create directory | : | Shell command |

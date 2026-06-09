@@ -99,7 +99,7 @@ fn preview_dir(
 ) -> String {
     let ls_colors = crate::entry::parse_ls_colors();
     let entries = crate::entry::load_dir(
-        path, show_hidden, sort_mode, sort_invert, &ls_colors, &[],
+        path, show_hidden, sort_mode, sort_invert, &ls_colors, &[], &[],
     );
     if entries.is_empty() {
         // Fallback path for permission-denied / missing-dir cases.

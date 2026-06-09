@@ -81,7 +81,7 @@ impl App {
             uid: 0,
             gid: 0,
             color_code: "\x1b[38;5;12m".into(),
-            tagged: false,
+            tagged: false, delete_marked: false,
             search_hit: false,
         });
 
@@ -110,7 +110,7 @@ impl App {
                         uid: 0,
                         gid: 0,
                         color_code: "\x1b[38;5;12m".into(),
-                        tagged: false,
+                        tagged: false, delete_marked: false,
                         search_hit: false,
                     });
                 }
@@ -127,7 +127,7 @@ impl App {
                     uid: 0,
                     gid: 0,
                     color_code: String::new(),
-                    tagged: false,
+                    tagged: false, delete_marked: false,
                     search_hit: false,
                 });
             }

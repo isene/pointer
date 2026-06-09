@@ -199,7 +199,8 @@ fn main() {
             "E" => { app.bulk_rename(); app.reload_and_render(); }
             "X" => { app.compare_files(); }
             "s" => { app.link_items(); app.reload_and_render(); }
-            "d" => { app.delete_items(); app.reload_and_render(); }
+            "d" => { app.toggle_delete_mark(); app.render(); }
+            "<" => { app.purge_deleted(); app.reload_and_render(); }
             "D" => {
                 if app.is_archive_mode() {
                     app.archive_extract_entries();

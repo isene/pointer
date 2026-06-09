@@ -11,6 +11,7 @@ pub struct Tab {
     pub index: usize,
     pub scroll_ix: usize,
     pub tagged: Vec<PathBuf>,
+    pub delete_marked: Vec<PathBuf>,
     pub filter_ext: String,
     pub filter_regex: String,
     pub show_hidden: bool,
@@ -39,6 +40,7 @@ impl App {
             index: self.index,
             scroll_ix: self.scroll_ix,
             tagged: self.tagged.clone(),
+            delete_marked: self.delete_marked.clone(),
             filter_ext: self.filter_ext.clone(),
             filter_regex: self.filter_regex.clone(),
             show_hidden: self.show_hidden,
@@ -55,6 +57,7 @@ impl App {
             tab.index = self.index;
             tab.scroll_ix = self.scroll_ix;
             tab.tagged = self.tagged.clone();
+            tab.delete_marked = self.delete_marked.clone();
             tab.filter_ext = self.filter_ext.clone();
             tab.filter_regex = self.filter_regex.clone();
             tab.show_hidden = self.show_hidden;
@@ -71,6 +74,7 @@ impl App {
             self.index = tab.index;
             self.scroll_ix = tab.scroll_ix;
             self.tagged = tab.tagged.clone();
+            self.delete_marked = tab.delete_marked.clone();
             self.filter_ext = tab.filter_ext.clone();
             self.filter_regex = tab.filter_regex.clone();
             self.show_hidden = tab.show_hidden;
@@ -92,6 +96,7 @@ impl App {
             index: 0,
             scroll_ix: 0,
             tagged: Vec::new(),
+            delete_marked: Vec::new(),
             filter_ext: String::new(),
             filter_regex: String::new(),
             show_hidden: self.show_hidden,
@@ -155,6 +160,7 @@ impl App {
             index: self.index,
             scroll_ix: self.scroll_ix,
             tagged: self.tagged.clone(),
+            delete_marked: self.delete_marked.clone(),
             filter_ext: self.filter_ext.clone(),
             filter_regex: self.filter_regex.clone(),
             show_hidden: self.show_hidden,

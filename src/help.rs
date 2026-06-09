@@ -53,7 +53,8 @@ impl App {
 {}\n\
   p           Copy tagged/selected here\n\
   P           Move tagged/selected here\n\
-  d           Delete tagged/selected\n\
+  d           Flag tagged/selected for deletion (dark-red D)\n\
+  <           Purge: delete everything flagged with d\n\
   c           Rename current item\n\
   s           Create symlinks\n\
   =           Create directory\n\

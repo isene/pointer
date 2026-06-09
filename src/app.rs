@@ -45,6 +45,9 @@ pub struct App {
     pub scroll_ix: usize,
     pub tagged: Vec<PathBuf>,
     pub tagged_size_cache: Option<u64>,
+    /// Items flagged for deletion (kastrup-style): `d` toggles, `<` purges.
+    /// Kept per-tab like `tagged`; rendered dark-red with a `D` prefix.
+    pub delete_marked: Vec<PathBuf>,
     pub ls_colors: HashMap<String, String>,
     pub sort_mode: SortMode,
     pub sort_invert: bool,
@@ -105,6 +108,7 @@ impl App {
             scroll_ix: 0,
             tagged: Vec::new(),
             tagged_size_cache: None,
+            delete_marked: Vec::new(),
             ls_colors,
             sort_mode,
             sort_invert,
@@ -171,6 +175,7 @@ impl App {
             self.sort_invert,
             &self.ls_colors,
             &self.tagged,
+            &self.delete_marked,
         );
 
         // Apply filters
@@ -346,8 +351,17 @@ impl App {
                 format_short_entry(entry)
             };
 
-            // RTFM style: → prefix + underline for selected, reverse for tagged, both if selected+tagged
-            let line = if i == self.index && entry.tagged {
+            // RTFM style: → prefix + underline for selected, reverse for tagged, both if selected+tagged.
+            // Delete-flag (kastrup-style) takes visual precedence: a dark-red
+            // "D" prefix + dark-red name; selection still shows via underline.
+            let line = if entry.delete_marked {
+                let body = if i == self.index {
+                    style::underline(&style::fg(&name_part, 88))
+                } else {
+                    style::fg(&name_part, 88)
+                };
+                format!("{} {}", style::fg("D", 88), body)
+            } else if i == self.index && entry.tagged {
                 format!("\u{2192} {}", style::reverse(&style::underline(&name_part)))
             } else if i == self.index {
                 format!("\u{2192} {}", style::underline(&name_part))

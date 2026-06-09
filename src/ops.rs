@@ -228,13 +228,65 @@ impl App {
         self.tagged.clear();
     }
 
-    /// Delete tagged/selected items (RTFM style: show info in right pane, single-key confirm)
-    pub fn delete_items(&mut self) {
+    /// `d` — toggle the delete-flag on items (kastrup convention). With
+    /// items tagged, flag ALL tagged for deletion and clear the tags — so
+    /// you can `t` several files, then `d` to flag them all. Otherwise
+    /// toggle the current item. `<` then purges the flagged set. In archive
+    /// mode there's no flag-then-purge, so fall back to immediate delete.
+    pub fn toggle_delete_mark(&mut self) {
         if self.is_archive_mode() {
             self.archive_delete_entries();
             return;
         }
-        let items = self.op_items();
+        if !self.tagged.is_empty() {
+            for path in std::mem::take(&mut self.tagged) {
+                if !self.delete_marked.contains(&path) {
+                    self.delete_marked.push(path);
+                }
+            }
+            self.tagged_size_cache = None;
+            for e in &mut self.files {
+                if e.tagged { e.tagged = false; e.delete_marked = true; }
+            }
+            let n = self.delete_marked.len();
+            self.status.say(&style::fg(
+                &format!(" {} item(s) flagged for deletion — press < to purge", n), 88));
+            return;
+        }
+        let Some(entry) = self.files.get(self.index) else { return };
+        if entry.name == ".." { return; }
+        let path = entry.path.clone();
+        if let Some(pos) = self.delete_marked.iter().position(|p| p == &path) {
+            self.delete_marked.remove(pos);
+        } else {
+            self.delete_marked.push(path);
+        }
+        if let Some(entry) = self.files.get_mut(self.index) {
+            entry.delete_marked = !entry.delete_marked;
+        }
+        // Advance to next (like tag) so multiple flags are fast.
+        if self.index < self.files.len().saturating_sub(1) {
+            self.index += 1;
+        }
+    }
+
+    /// `<` — purge: delete everything flagged with `d` (move to trash / rm,
+    /// single-key confirm). Mirrors kastrup's `<` purge.
+    pub fn purge_deleted(&mut self) {
+        if self.is_archive_mode() { return; }
+        if self.delete_marked.is_empty() {
+            self.status.say(&style::fg(" Nothing flagged for deletion (press d to flag)", 245));
+            return;
+        }
+        let items = std::mem::take(&mut self.delete_marked);
+        for e in &mut self.files { e.delete_marked = false; }
+        self.delete_path_set(items);
+    }
+
+    /// Delete a specific set of paths (move to trash or rm) with a single-key
+    /// confirm. Shared by `delete_items` (tagged/selected) and `purge_deleted`
+    /// (the delete-flagged set).
+    fn delete_path_set(&mut self, items: Vec<PathBuf>) {
         if items.is_empty() { return; }
 
         // Remember current file name for index restoration after delete
@@ -246,7 +298,7 @@ impl App {
             .map(|m| m.len())
             .sum();
         let mut info_lines = vec![
-            style::fg("Tagged Items", 196),
+            style::fg("Flagged for deletion", 196),
             "=".repeat(50),
             String::new(),
             style::fg("Summary:", 46),
