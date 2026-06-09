@@ -361,9 +361,15 @@ impl App {
                 }
             }
         }
-        // The caller (`<`) follows with reload_and_render, which repaints
-        // the right pane for the new selection — no clear needed here (a
-        // clear would just flash the pane blank first).
+        // The deleted file may have had an image showing in the right pane.
+        // Clear that (kitty placement) and render the new selection's preview.
+        // reload_and_render can't do this for us: we already reloaded + moved
+        // the cursor above, so by the time it runs its before/after selection
+        // compare equal and it skips the image clear — leaving the stale
+        // image of the just-deleted file on screen.
+        self.prev_selected = None;
+        self.clear_image();
+        self.render();
     }
 
     /// Rename current item
