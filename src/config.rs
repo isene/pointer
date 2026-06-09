@@ -29,6 +29,11 @@ pub struct Config {
     pub preview: bool,
     #[serde(default)]
     pub trash: bool,
+    /// Ask y/n before purging delete-flagged items (`<`). Default on;
+    /// set false for `d d d <` to delete without a prompt (trash is the
+    /// safety net).
+    #[serde(default = "default_true")]
+    pub confirm_delete: bool,
     #[serde(default = "default_true")]
     pub bat: bool,
     #[serde(default)]
@@ -102,6 +107,7 @@ impl Default for Config {
             border: default_border(),
             preview: true,
             trash: true,
+            confirm_delete: true,
             bat: true,
             show_hidden: false,
             long_format: false,

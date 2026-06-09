@@ -355,10 +355,13 @@ impl App {
             // Delete-flag (kastrup-style) takes visual precedence: a dark-red
             // "D" prefix + dark-red name; selection still shows via underline.
             let line = if entry.delete_marked {
+                // Override LS_COLORS: drop the file's own colour and paint the
+                // whole name dark red, like a delete-flagged kastrup message.
+                let plain = crust::strip_ansi(&name_part);
                 let body = if i == self.index {
-                    style::underline(&style::fg(&name_part, 88))
+                    style::underline(&style::fg(&plain, 88))
                 } else {
-                    style::fg(&name_part, 88)
+                    style::fg(&plain, 88)
                 };
                 format!("{} {}", style::fg("D", 88), body)
             } else if i == self.index && entry.tagged {

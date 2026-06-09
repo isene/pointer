@@ -320,16 +320,17 @@ impl App {
         }
         self.show_in_right(&info_lines.join("\n"));
 
-        // Show prompt and wait for single keypress (no Enter needed)
-        let action = if self.config.trash { "Move to trash" } else { "Delete permanently" };
-        self.status.say(&style::fg(&format!(" {}? (y/n)", action), 220));
-
-        // Single key confirm
-        let Some(key) = crust::Input::getchr(None) else { return };
-        if key != "y" && key != "Y" {
-            self.msg_cancel();
-            self.prev_selected = None;
-            return;
+        // Optional single-key confirm (config `confirm_delete`, default on).
+        // Off → `d d d <` purges with no prompt (trash is the safety net).
+        if self.config.confirm_delete {
+            let action = if self.config.trash { "Move to trash" } else { "Delete permanently" };
+            self.status.say(&style::fg(&format!(" {}? (y/n)", action), 220));
+            let Some(key) = crust::Input::getchr(None) else { return };
+            if key != "y" && key != "Y" {
+                self.msg_cancel();
+                self.prev_selected = None;
+                return;
+            }
         }
 
         let trash = self.config.trash;

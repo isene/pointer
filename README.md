@@ -82,8 +82,9 @@ Press `?` for built-in help. Press `q` to quit (saves state).
 > between the two): press **`d`** to *flag* the current item (or all
 > tagged items) for deletion — flagged entries render in dark red with a
 > `D` prefix and `d` toggles the flag off. Nothing is removed until you
-> press **`<`** to *purge* every flagged item (with a single-key confirm,
-> moving to trash when enabled). So `t` to tag, `d` to flag, `<` to purge.
+> press **`<`** to *purge* every flagged item (single-key confirm by
+> default; set `confirm_delete: false` to skip it, moving to trash when
+> enabled). So `t` to tag, `d` to flag, `<` to purge.
 > `d` is now safe to press by reflex — it never deletes on its own.
 
 ### Quick Reference
@@ -150,6 +151,7 @@ Plugins: `~/.pointer/plugins/`
   "border": 2,
   "preview": true,
   "trash": true,
+  "confirm_delete": true,
   "bat": true,
   "show_hidden": false,
   "long_format": false,
@@ -165,6 +167,8 @@ Plugins: `~/.pointer/plugins/`
   "remember_positions": true
 }
 ```
+
+`confirm_delete` (default `true`) asks a single-key y/n before `<` purges the delete-flagged items. Set it `false` to purge immediately — handy with `trash` on, where `d d d <` flags three files and deletes them in one keystroke, recoverable from `~/.pointer/trash/`.
 
 `remember_positions` (default `true`) persists the cursor position per directory across sessions. Toggle at runtime with `r` in the `C` config screen, or launch with `pointer --fresh` to bypass restoration for a single session.
 
