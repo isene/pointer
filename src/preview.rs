@@ -307,10 +307,13 @@ fn preview_file(path: &Path, max_lines: usize, use_bat: bool) -> String {
         }
     }
 
-    // EPUB
+    // EPUB: extract only the text parts (OPF metadata + XHTML chapters),
+    // never the whole archive — dumping binary images/fonts would spray
+    // control bytes into the preview.
     if ext_lower == "epub" {
         if let Some(s) = shell_preview(&format!(
-            "unzip -qc {:?} 2>/dev/null | grep -oP '(?<=>)[^<]+' | head -200", path)) {
+            "unzip -qc {:?} '*.opf' '*.xhtml' '*.html' '*.htm' 2>/dev/null \
+             | grep -oP '(?<=>)[^<]+' | head -200", path)) {
             return s;
         }
     }
