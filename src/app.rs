@@ -2,6 +2,7 @@ use crust::{Crust, Pane};
 use crust::style;
 use std::collections::HashMap;
 use std::env;
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -715,12 +716,22 @@ impl App {
             self.run_interactive(&format!("{} {:?}", editor, path));
             return;
         }
-        let _ = std::process::Command::new("xdg-open")
-            .arg(path)
+        // Detach the opener into its own session (setsid in the child, before
+        // exec) so the GUI app it launches outlives pointer. Without this the
+        // app shares pointer's session and the terminal hangup (SIGHUP) on
+        // pointer's exit takes the opened file's app down too.
+        let mut cmd = std::process::Command::new("xdg-open");
+        cmd.arg(path)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn();
+            .stderr(std::process::Stdio::null());
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::setsid();
+                Ok(())
+            });
+        }
+        let _ = cmd.spawn();
     }
 
     /// Query xdg-mime for the default desktop file for `path`, then parse its
