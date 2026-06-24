@@ -1,11 +1,10 @@
 use crate::app::App;
-use crate::entry::{DirEntry, SortMode};
+use crate::entry::SortMode;
 use crust::style;
 use std::env;
 use std::path::PathBuf;
 
 pub struct Tab {
-    pub id: usize,
     pub name: String,
     pub dir: PathBuf,
     pub index: usize,
@@ -19,22 +18,11 @@ pub struct Tab {
     pub sort_invert: bool,
 }
 
-static mut NEXT_TAB_ID: usize = 1;
-
-fn next_id() -> usize {
-    unsafe {
-        let id = NEXT_TAB_ID;
-        NEXT_TAB_ID += 1;
-        id
-    }
-}
-
 impl App {
     /// Initialize first tab from current state
     pub fn init_tabs(&mut self) {
         let cwd = env::current_dir().unwrap_or_default();
         self.tabs.push(Tab {
-            id: next_id(),
             name: dir_name(&cwd),
             dir: cwd,
             index: self.index,
@@ -90,7 +78,6 @@ impl App {
         self.save_tab_state();
         let cwd = env::current_dir().unwrap_or_default();
         self.tabs.push(Tab {
-            id: next_id(),
             name: dir_name(&cwd),
             dir: cwd,
             index: 0,
@@ -154,7 +141,6 @@ impl App {
         self.save_tab_state();
         let cwd = env::current_dir().unwrap_or_default();
         self.tabs.push(Tab {
-            id: next_id(),
             name: dir_name(&cwd),
             dir: cwd,
             index: self.index,

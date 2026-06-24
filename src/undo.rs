@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 #[derive(Clone)]
 pub enum UndoOp {
-    Delete { paths: Vec<PathBuf>, trash_paths: Vec<(PathBuf, PathBuf)> },
+    Delete { trash_paths: Vec<(PathBuf, PathBuf)> },
     Move { moves: Vec<(PathBuf, PathBuf)> },
     Rename { old: PathBuf, new: PathBuf },
     Copy { created: Vec<PathBuf> },

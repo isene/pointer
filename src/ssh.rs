@@ -1,6 +1,5 @@
 use crate::app::App;
 use crate::entry::DirEntry;
-use crust::style;
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::SystemTime;
@@ -116,22 +115,5 @@ impl App {
         }
         self.index = 0;
         self.scroll_ix = 0;
-    }
-
-    /// SSH history (C-; key)
-    pub fn ssh_history(&mut self) {
-        if self.state.ssh_history.is_empty() {
-            self.msg_info("No SSH history");
-            return;
-        }
-        let mut lines = vec![
-            style::fg("SSH History", 81),
-            "=".repeat(50),
-            String::new(),
-        ];
-        for (i, entry) in self.state.ssh_history.iter().enumerate() {
-            lines.push(format!("  {} {}", style::fg(&format!("{:2}", i + 1), 220), entry));
-        }
-        self.show_in_right(&lines.join("\n"));
     }
 }

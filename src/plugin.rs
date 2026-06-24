@@ -11,7 +11,6 @@ pub struct Plugin {
     pub command: String,
     pub interactive: bool,
     pub enabled: bool,
-    pub path: PathBuf,
 }
 
 impl App {
@@ -109,7 +108,6 @@ fn scan_plugins() -> Vec<Plugin> {
                         command: json["command"].as_str().unwrap_or("").to_string(),
                         interactive: json["interactive"].as_bool().unwrap_or(false),
                         enabled: !path.to_string_lossy().ends_with(".off.json"),
-                        path,
                     });
                 }
             }

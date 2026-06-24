@@ -18,7 +18,6 @@ pub struct ArchiveState {
 
 #[derive(Clone)]
 pub struct ArchiveEntry {
-    pub name: String,
     pub full_path: String,
     pub is_dir: bool,
     pub size: u64,
@@ -699,7 +698,6 @@ fn parse_tar_listing(text: &str) -> Vec<ArchiveEntry> {
             let name = line.trim_end_matches('/');
             let is_dir = line.ends_with('/');
             ArchiveEntry {
-                name: name.rsplit('/').next().unwrap_or(name).to_string(),
                 full_path: name.to_string(),
                 is_dir,
                 size: 0,
@@ -720,7 +718,6 @@ fn parse_zip_listing(text: &str) -> Vec<ArchiveEntry> {
             let name = parts[3].trim().trim_end_matches('/');
             let is_dir = parts[3].trim().ends_with('/') || size == 0;
             Some(ArchiveEntry {
-                name: name.rsplit('/').next().unwrap_or(name).to_string(),
                 full_path: name.to_string(),
                 is_dir,
                 size,
@@ -736,7 +733,6 @@ fn parse_simple_listing(text: &str) -> Vec<ArchiveEntry> {
             let name = line.trim().trim_end_matches('/');
             let is_dir = line.trim().ends_with('/');
             ArchiveEntry {
-                name: name.rsplit('/').next().unwrap_or(name).to_string(),
                 full_path: name.to_string(),
                 is_dir,
                 size: 0,
@@ -754,9 +750,7 @@ fn parse_7z_listing(text: &str) -> Vec<ArchiveEntry> {
     for line in text.lines() {
         if line.starts_with("Path = ") {
             if !current_path.is_empty() {
-                let name = current_path.rsplit('/').next().unwrap_or(&current_path).to_string();
                 entries.push(ArchiveEntry {
-                    name,
                     full_path: current_path.clone(),
                     is_dir,
                     size: current_size,
@@ -772,9 +766,7 @@ fn parse_7z_listing(text: &str) -> Vec<ArchiveEntry> {
         }
     }
     if !current_path.is_empty() {
-        let name = current_path.rsplit('/').next().unwrap_or(&current_path).to_string();
         entries.push(ArchiveEntry {
-            name,
             full_path: current_path,
             is_dir,
             size: current_size,

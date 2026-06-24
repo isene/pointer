@@ -70,7 +70,6 @@ pub struct App {
     pub shell_cmd_thread: Option<std::thread::JoinHandle<()>>,
     pub pick_output: Option<String>,
     pub fresh: bool,
-    pub locate_active: bool,
     pub ssh_state: Option<crate::ssh::SshState>,
     pub preview_cache: crate::preview::PreviewCache,
     pub dir_mtime: Option<std::time::SystemTime>,
@@ -142,7 +141,6 @@ impl App {
             shell_cmd_thread: None,
             pick_output: None,
             fresh,
-            locate_active: false,
             ssh_state: None,
             preview_cache: crate::preview::new_cache(),
             dir_mtime: None,
@@ -909,14 +907,6 @@ impl App {
         self.load_dir();
         self.prev_selected = None;
         self.rebuild_panes();
-    }
-
-    pub fn selected_path(&self) -> Option<PathBuf> {
-        self.files.get(self.index).map(|e| e.path.clone())
-    }
-
-    pub fn selected_entry(&self) -> Option<&DirEntry> {
-        self.files.get(self.index)
     }
 
     // --- Config management ---

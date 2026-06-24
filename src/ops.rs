@@ -1,10 +1,9 @@
-use crate::app::{App, FileOpState};
+use crate::app::App;
 use crate::config;
 use crate::undo::UndoOp;
 use crust::style;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 
 impl App {
     /// Get items to operate on: tagged items, or selected item
@@ -338,7 +337,6 @@ impl App {
 
         if !deleted.is_empty() {
             self.undo_stack.push(UndoOp::Delete {
-                paths: deleted.clone(),
                 trash_paths,
             });
         }
