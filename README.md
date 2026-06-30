@@ -66,7 +66,7 @@ Press `?` for built-in help. Press `q` to quit (saves state).
 - **File comparison** (diff between two tagged files)
 - **Git status** display
 - **Directory hashing** (SHA1 change detection)
-- **OpenAI integration** (file description, interactive chat)
+- **Claude integration** (`I` = one-shot `claude -p` file description; `Ctrl+A` = full Claude session, follows you to a directory you ask it to open)
 - **Plugin system** (JSON manifests, external commands)
 - **Script evaluator** (`@` mode with full context via env vars)
 - **Top bar color matching** (path-based, like RTFM's @topmatch)
@@ -125,8 +125,8 @@ Press `?` for built-in help. Press `q` to quit (saves state).
 | y | Yank to primary | e | File properties |
 | Y | Yank to clipboard | G | Git status |
 | Ctrl-Y | Copy right pane | H | Hash directory |
-| | | S | System info |
-| Ctrl-L/Ctrl-R | Redraw/Refresh | I | AI describe |
+| Ctrl-A | Claude session | S | System info |
+| Ctrl-L/Ctrl-R | Redraw/Refresh | I | Describe file (claude -p) |
 
 ### Right Pane Scrolling
 
