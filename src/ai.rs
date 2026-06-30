@@ -1,109 +1,87 @@
 use crate::app::App;
-use crust::style;
+use crust::Crust;
 use std::process::Command;
 
-/// Dispatch a chat completion. Routes to Anthropic when model starts with
-/// `claude-`, otherwise OpenAI. Returns the assistant message text.
-fn ai_request(model: &str, key: &str, messages: &serde_json::Value) -> Option<String> {
-    if model.starts_with("claude-") {
-        let body = serde_json::json!({
-            "model": model,
-            "max_tokens": 1024,
-            "messages": messages,
-        });
-        let output = Command::new("curl")
-            .args(["-s", "-X", "POST", "https://api.anthropic.com/v1/messages",
-                   "-H", "content-type: application/json",
-                   "-H", "anthropic-version: 2023-06-01",
-                   "-H", &format!("x-api-key: {}", key),
-                   "-d", &body.to_string()])
-            .output().ok()?;
-        if !output.status.success() { return None; }
-        let response = String::from_utf8_lossy(&output.stdout);
-        let json: serde_json::Value = serde_json::from_str(&response).ok()?;
-        json["content"][0]["text"].as_str().map(String::from)
-    } else {
-        let body = serde_json::json!({
-            "model": model,
-            "messages": messages,
-            "max_tokens": 600,
-        });
-        let output = Command::new("curl")
-            .args(["-s", "-X", "POST", "https://api.openai.com/v1/chat/completions",
-                   "-H", "Content-Type: application/json",
-                   "-H", &format!("Authorization: Bearer {}", key),
-                   "-d", &body.to_string()])
-            .output().ok()?;
-        if !output.status.success() { return None; }
-        let response = String::from_utf8_lossy(&output.stdout);
-        let json: serde_json::Value = serde_json::from_str(&response).ok()?;
-        json["choices"][0]["message"]["content"].as_str().map(String::from)
-    }
-}
-
 impl App {
-    /// AI file description (I key). Routes to Anthropic or OpenAI based on
-    /// the configured model name (claude-* → Anthropic).
+    /// `I` — describe the selected file/directory. One-shot through the
+    /// Claude Code CLI (`claude -p`): uses the user's existing Claude
+    /// auth, no API key in pointer's config. Blocks while it runs (5-30s),
+    /// then shows the answer in the right pane. Mirrors kastrup's `c`.
     pub fn ai_describe(&mut self) {
-        if self.config.ai_key.is_empty() {
-            self.msg_warn("Set ai_key in ~/.pointer/conf.json");
-            return;
-        }
         let Some(entry) = self.files.get(self.index) else { return };
         let path = entry.path.clone();
         let name = entry.name.clone();
 
-        self.msg_info("Asking AI...");
+        self.msg_info("Asking claude…");
+        // Force the status line to paint before the blocking call.
+        use std::io::Write as _;
+        let _ = std::io::stdout().flush();
 
         let preview_text = crate::preview::preview(
             &path, 100, false, self.show_hidden, self.sort_mode, self.sort_invert,
         );
         let plain = crust::strip_ansi(&preview_text);
-        let context = if plain.len() > 2000 { &plain[..2000] } else { &plain };
+        // chars().take, not byte slicing — a 4000-byte cut could land mid
+        // UTF-8 char and panic on a file with multibyte content.
+        let context: String = plain.chars().take(4000).collect();
 
         let prompt = format!(
-            "Summarize the purpose of this file/directory: {}. Content preview:\n{}",
-            name, context
+            "Summarize the purpose of this file/directory: {} ({}). Content preview:\n{}",
+            name, path.display(), context
         );
 
-        let messages = serde_json::json!([{"role": "user", "content": prompt}]);
-        match ai_request(&self.config.ai_model, &self.config.ai_key, &messages) {
-            Some(content) => self.show_in_right(&content),
-            None => self.msg_error("AI request failed"),
+        let result = Command::new("claude")
+            .arg("-p")
+            .arg(&prompt)
+            .stdin(std::process::Stdio::null())
+            .output();
+        match result {
+            Ok(o) if o.status.success() => {
+                let resp = String::from_utf8_lossy(&o.stdout).trim_end().to_string();
+                if resp.is_empty() {
+                    self.msg_warn("claude returned an empty response");
+                } else {
+                    self.show_in_right(&resp);
+                    self.msg_info("claude response in right pane");
+                }
+            }
+            _ => self.msg_error("claude -p failed (is the claude CLI installed?)"),
         }
     }
 
-    /// AI chat mode (C-A key)
+    /// `Ctrl+a` — hand the terminal to a full interactive Claude Code
+    /// session, seeded with the current directory + selection. `/exit`
+    /// returns to pointer. Mirrors kastrup's `:chat`.
     pub fn ai_chat(&mut self) {
-        if self.config.ai_key.is_empty() {
-            self.msg_warn("Set ai_key in ~/.pointer/conf.json");
-            return;
-        }
+        let cwd = std::env::current_dir().unwrap_or_default();
+        let sel_line = match self.files.get(self.index) {
+            Some(e) => format!(" The selected entry is {}.", e.path.display()),
+            None => String::new(),
+        };
+        let initial = format!(
+            "I'm browsing files in pointer (a terminal file manager). The current \
+             directory is {}.{} Help me with whatever I ask about these files. \
+             When you're done, /exit returns me to pointer.",
+            cwd.display(), sel_line
+        );
 
-        let mut history = Vec::new();
-        loop {
-            let input = self.prompt("AI> ", "");
-            if input.is_empty() { break; }
+        // Bracketed-paste mode interferes with claude's input handling;
+        // disable it for the duration (re-enabled on return). Same handoff
+        // as run_interactive: cleanup → status() → init → reload.
+        use std::io::Write as _;
+        print!("\x1b[?2004l");
+        let _ = std::io::stdout().flush();
+        Crust::cleanup();
+        Crust::clear_screen();
 
-            history.push(serde_json::json!({"role": "user", "content": input}));
+        let _ = Command::new("claude").arg(&initial).status();
 
-            let messages = serde_json::Value::Array(history.clone());
-            match ai_request(&self.config.ai_model, &self.config.ai_key, &messages) {
-                Some(content) => {
-                    history.push(serde_json::json!({"role": "assistant", "content": content}));
-                    let display: Vec<String> = history.iter().map(|m| {
-                        let role = m["role"].as_str().unwrap_or("");
-                        let text = m["content"].as_str().unwrap_or("");
-                        if role == "user" {
-                            format!("{}: {}", style::fg("You", 81), text)
-                        } else {
-                            format!("{}: {}", style::fg("AI", 46), text)
-                        }
-                    }).collect();
-                    self.show_in_right(&display.join("\n\n"));
-                }
-                None => { self.msg_error("AI request failed"); break; }
-            }
-        }
+        Crust::init();
+        Crust::clear_screen();
+        print!("\x1b[?2004h");
+        let _ = std::io::stdout().flush();
+        self.load_dir(); // claude may have created / deleted files
+        self.resize();   // rebuild panes + full redraw (like plugin.rs)
+        self.msg_info("Back from claude");
     }
 }

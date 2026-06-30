@@ -89,8 +89,8 @@ impl App {
   C           Preferences editor\n\
   R           Reload config\n\
   V           Plugin manager\n\
-  I           AI describe file\n\
-  Ctrl-A      AI chat\n\
+  I           Describe file (claude -p)\n\
+  Ctrl-A      Claude session\n\
   Ctrl-E      SSH browser\n\
   e           File properties\n\
   G           Git status\n\
