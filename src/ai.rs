@@ -77,11 +77,12 @@ impl App {
         let _ = Command::new("claude").arg(&initial).status();
 
         Crust::init();
-        Crust::clear_screen();
         print!("\x1b[?2004h");
         let _ = std::io::stdout().flush();
-        self.load_dir(); // claude may have created / deleted files
-        self.resize();   // rebuild panes + full redraw (like plugin.rs)
+        self.load_dir();   // claude may have created / deleted files
+        self.resize();     // rebuild panes sized to the current terminal
+        self.clear_image(); // the session cleared the screen; drop stale image state
+        self.render();      // resize() only rebuilds panes — this repaints them
         self.msg_info("Back from claude");
     }
 }
