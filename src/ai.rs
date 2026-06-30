@@ -58,11 +58,20 @@ impl App {
             Some(e) => format!(" The selected entry is {}.", e.path.display()),
             None => String::new(),
         };
+        // Handoff file: if I ask the session to take me somewhere ("go to
+        // the ticker repo"), Claude writes the absolute destination here and
+        // pointer cd's there on return — the child's own cwd can't propagate
+        // back to the parent, so this file is the channel.
+        let cd_file = format!("/tmp/pointer-cd-{}", std::process::id());
+        let _ = std::fs::remove_file(&cd_file);
         let initial = format!(
             "I'm browsing files in pointer (a terminal file manager). The current \
              directory is {}.{} Help me with whatever I ask about these files. \
-             When you're done, /exit returns me to pointer.",
-            cwd.display(), sel_line
+             If I ask you to take me to / go to / cd to a directory (e.g. a repo), \
+             resolve it to an absolute path and write that single path (nothing \
+             else) to {} — pointer reads it and lands there when I exit. When \
+             you're done, /exit returns me to pointer.",
+            cwd.display(), sel_line, cd_file
         );
 
         // Bracketed-paste mode interferes with claude's input handling;
@@ -79,10 +88,21 @@ impl App {
         Crust::init();
         print!("\x1b[?2004h");
         let _ = std::io::stdout().flush();
-        self.load_dir();   // claude may have created / deleted files
+        // Follow the session's destination, if it left one.
+        let mut moved = false;
+        if let Ok(dest) = std::fs::read_to_string(&cd_file) {
+            let dest = dest.trim();
+            if !dest.is_empty() && std::path::Path::new(dest).is_dir()
+                && std::env::set_current_dir(dest).is_ok() {
+                self.index = 0;
+                moved = true;
+            }
+        }
+        let _ = std::fs::remove_file(&cd_file);
+        self.load_dir();   // picks up the new cwd (or file changes in this one)
         self.resize();     // rebuild panes sized to the current terminal
         self.clear_image(); // the session cleared the screen; drop stale image state
         self.render();      // resize() only rebuilds panes — this repaints them
-        self.msg_info("Back from claude");
+        self.msg_info(if moved { "Moved here from claude" } else { "Back from claude" });
     }
 }
