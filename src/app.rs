@@ -804,14 +804,14 @@ impl App {
     // --- View toggles ---
 
     pub fn toggle_hidden(&mut self) {
+        // Only flip the flag. The caller runs reload_and_render, which is the
+        // single owner of reload + cursor-preservation-by-name + repaint
+        // detection. Doing our own load_dir here would move the selection
+        // BEFORE reload_and_render captures the "previous" one, so toggling
+        // hidden off while sitting on a hidden dir (e.g. .amar/) would land on
+        // a new entry yet leave selection_changed == false — the right pane
+        // would keep showing the old hidden dir's preview.
         self.show_hidden = !self.show_hidden;
-        let name = self.files.get(self.index).map(|e| e.name.clone());
-        self.load_dir();
-        if let Some(name) = name {
-            if let Some(pos) = self.files.iter().position(|e| e.name == name) {
-                self.index = pos;
-            }
-        }
     }
 
     pub fn toggle_long_format(&mut self) {
