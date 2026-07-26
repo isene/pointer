@@ -78,7 +78,7 @@ impl App {
         // disable it for the duration (re-enabled on return). Same handoff
         // as run_interactive: cleanup → status() → init → reload.
         use std::io::Write as _;
-        print!("\x1b[?2004l");
+        Crust::disable_bracketed_paste();
         let _ = std::io::stdout().flush();
         Crust::cleanup();
         Crust::clear_screen();
@@ -86,7 +86,7 @@ impl App {
         let _ = Command::new("claude").arg(&initial).status();
 
         Crust::init();
-        print!("\x1b[?2004h");
+        Crust::enable_bracketed_paste();
         let _ = std::io::stdout().flush();
         // Follow the session's destination, if it left one.
         let mut moved = false;

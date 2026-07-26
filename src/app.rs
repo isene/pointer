@@ -1364,7 +1364,7 @@ fn format_short_entry(entry: &DirEntry) -> String {
         name.push('*');
     }
     if !entry.color_code.is_empty() {
-        format!("{}{}\x1b[0m", entry.color_code, name)
+        format!("{}{}{}", entry.color_code, name, style::RESET)
     } else {
         name
     }
@@ -1384,7 +1384,7 @@ fn format_long_entry(entry: &DirEntry) -> String {
     let size = format_size(entry.size);
     let time = format_time(entry.modified);
     let colored_name = if !entry.color_code.is_empty() {
-        format!("{}{}\x1b[0m", entry.color_code, name)
+        format!("{}{}{}", entry.color_code, name, style::RESET)
     } else {
         name
     };

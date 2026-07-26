@@ -79,7 +79,7 @@ impl App {
             mode: 0,
             uid: 0,
             gid: 0,
-            color_code: "\x1b[38;5;12m".into(),
+            color_code: style::set_fg(12),
             tagged: false, delete_marked: false,
             search_hit: false,
         });
@@ -108,7 +108,7 @@ impl App {
                         mode: 0,
                         uid: 0,
                         gid: 0,
-                        color_code: "\x1b[38;5;12m".into(),
+                        color_code: style::set_fg(12),
                         tagged: false, delete_marked: false,
                         search_hit: false,
                     });

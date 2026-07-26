@@ -1,3 +1,4 @@
+use crust::style;
 use crate::app::App;
 use crate::entry::DirEntry;
 use std::path::PathBuf;
@@ -107,7 +108,7 @@ impl App {
                 mode: 0,
                 uid: 0,
                 gid: 0,
-                color_code: if is_dir { "\x1b[38;5;12m".into() } else { String::new() },
+                color_code: if is_dir { style::set_fg(12) } else { String::new() },
                 tagged: false,
                 delete_marked: false,
                 search_hit: false,

@@ -124,7 +124,7 @@ fn preview_dir(
         out.push_str(&e.color_code);
         out.push_str(&e.name);
         if !e.color_code.is_empty() {
-            out.push_str("\x1b[0m");
+            out.push_str(style::RESET);
         }
         if e.is_dir { out.push('/'); }
         else if e.is_symlink { out.push('@'); }

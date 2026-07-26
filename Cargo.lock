@@ -126,7 +126,7 @@ dependencies = [
 
 [[package]]
 name = "fe2o3-crust"
-version = "0.1.29"
+version = "0.1.37"
 dependencies = [
  "crossterm",
  "libc",
@@ -328,7 +328,7 @@ dependencies = [
 
 [[package]]
 name = "pointer"
-version = "0.1.60"
+version = "0.1.61"
 dependencies = [
  "fe2o3-crust",
  "fe2o3-glow",

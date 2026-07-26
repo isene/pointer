@@ -1,3 +1,4 @@
+use crust::style;
 use std::collections::HashMap;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -130,33 +131,33 @@ fn unquote_lscolors(s: &str) -> Option<String> {
 pub fn color_for(entry: &DirEntry, ls_colors: &HashMap<String, String>) -> String {
     if entry.is_symlink {
         if let Some(code) = ls_colors.get("ln") {
-            return format!("\x1b[{}m", code);
+            return style::sgr(code);
         }
-        return "\x1b[38;5;14m".into();
+        return style::set_fg(14);
     }
     if entry.is_dir {
         if let Some(code) = ls_colors.get("di") {
-            return format!("\x1b[{}m", code);
+            return style::sgr(code);
         }
-        return "\x1b[38;5;12m".into();
+        return style::set_fg(12);
     }
     // Check by extension
     if let Some(ext) = entry.path.extension().and_then(|e| e.to_str()) {
         let key = format!("*.{}", ext);
         if let Some(code) = ls_colors.get(&key) {
-            return format!("\x1b[{}m", code);
+            return style::sgr(code);
         }
         // Try lowercase
         let key_lower = format!("*.{}", ext.to_lowercase());
         if let Some(code) = ls_colors.get(&key_lower) {
-            return format!("\x1b[{}m", code);
+            return style::sgr(code);
         }
     }
     if entry.is_exec {
         if let Some(code) = ls_colors.get("ex") {
-            return format!("\x1b[{}m", code);
+            return style::sgr(code);
         }
-        return "\x1b[38;5;10m".into();
+        return style::set_fg(10);
     }
     String::new()
 }
