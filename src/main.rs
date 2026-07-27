@@ -19,6 +19,28 @@ mod undo;
 use crust::{Crust, Input};
 
 fn main() {
+    // --help and --version answer before the TUI touches the terminal.
+    // A tool that asks what this is — the fe2o3 launcher's ? popup, a
+    // packaging script, a curious shell — should get an answer, not a
+    // screen paint.
+    if std::env::args().skip(1).any(|a| a == "-h" || a == "--help") {
+        println!("pointer — File manager (Fe2O3 suite)");
+        println!();
+        println!("Usage: pointer [PATH] [OPTIONS]");
+        println!();
+        println!("  PATH           start in this directory, or select this file");
+        println!("  --pick=FILE    write the chosen path to FILE and exit (picker mode)");
+        println!("  --fresh        ignore the saved session and start clean");
+        println!();
+        println!("Two panes, previews with syntax highlighting and inline images, archive");
+        println!("browsing, SSH, undo, bookmarks and plugins. ? in the app lists every key.");
+        return;
+    }
+    if std::env::args().skip(1).any(|a| a == "-v" || a == "--version") {
+        println!("pointer {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+
     config::ensure_dirs();
 
     // Panic hook: write trace + backtrace to ~/.pointer/crash.log so
