@@ -8,6 +8,7 @@ impl App {
   j/DOWN      Move down\n\
   k/UP        Move up\n\
   l/RIGHT/RET Enter directory / open file\n\
+  x           Open file in the system default app (html → browser)\n\
   h/LEFT      Go to parent directory\n\
   g/HOME      Go to top\n\
   G/END       Go to bottom\n\

@@ -677,7 +677,11 @@ impl App {
         }
     }
 
-    /// Force-open selected item (x key): bypass archive mode, use xdg-open
+    /// Force-open selected item (x key): bypass archive mode and the
+    /// text-goes-to-$EDITOR rule, hand the file to the system default.
+    /// This is the only way to reach the GUI handler for a file type
+    /// that is also editable text — `.html` in Firefox rather than in
+    /// the editor.
     pub fn open_selected_force(&mut self) {
         let Some(entry) = self.files.get(self.index) else { return };
         let path = entry.path.clone();
@@ -689,7 +693,7 @@ impl App {
             self.prev_selected = None;
             self.load_dir();
         } else {
-            self.open_file(&path);
+            self.open_external(&path);
         }
     }
 
@@ -714,10 +718,16 @@ impl App {
             self.run_interactive(&format!("{} {:?}", editor, path));
             return;
         }
-        // Detach the opener into its own session (setsid in the child, before
-        // exec) so the GUI app it launches outlives pointer. Without this the
-        // app shares pointer's session and the terminal hangup (SIGHUP) on
-        // pointer's exit takes the opened file's app down too.
+        self.open_external(path);
+    }
+
+    /// Hand a file to the system default opener.
+    ///
+    /// Detach it into its own session (setsid in the child, before exec)
+    /// so the GUI app it launches outlives pointer. Without this the app
+    /// shares pointer's session and the terminal hangup (SIGHUP) on
+    /// pointer's exit takes the opened file's app down too.
+    pub fn open_external(&self, path: &PathBuf) {
         let mut cmd = std::process::Command::new("xdg-open");
         cmd.arg(path)
             .stdin(std::process::Stdio::null())
