@@ -61,7 +61,7 @@ impl App {
   =           Create directory\n\
   E           Bulk rename\n\
   X           Compare (2 tagged files)\n\
-  x           Extract archive\n\
+  z           Extract archive\n\
   Z           Create archive\n\
   U           Undo last operation\n\
 \n\
