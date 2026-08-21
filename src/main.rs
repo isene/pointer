@@ -30,6 +30,7 @@ fn main() {
         println!();
         println!("  PATH           start in this directory, or select this file");
         println!("  --pick=FILE    write the chosen path to FILE and exit (picker mode)");
+        println!("  --emit-cwd=FILE  on quit, write the directory you ended in to FILE");
         println!("  --fresh        ignore the saved session and start clean");
         println!();
         println!("Two panes, previews with syntax highlighting and inline images, archive");
@@ -53,11 +54,14 @@ fn main() {
     // The positional path may be a directory (cd there) or a file (cd into
     // its parent and select the file). `~` is expanded from $HOME.
     let mut pick_output = None;
+    let mut emit_cwd: Option<String> = None;
     let mut start_arg: Option<String> = None;
     let mut fresh = false;
     for arg in std::env::args().skip(1) {
         if arg.starts_with("--pick=") {
             pick_output = Some(arg[7..].to_string());
+        } else if let Some(v) = arg.strip_prefix("--emit-cwd=") {
+            emit_cwd = Some(v.to_string());
         } else if arg == "--fresh" {
             fresh = true;
         } else if !arg.starts_with('-') {
@@ -147,6 +151,14 @@ fn main() {
                         .map(|p| p.to_string_lossy().to_string())
                         .collect();
                     let _ = std::fs::write(path, lines.join("\n"));
+                }
+                // Where the user walked to. A caller that wants a
+                // DIRECTORY (scribe's `:w <Shift-Tab>`) reads this;
+                // tagging nothing and quitting is how you choose one.
+                if let Some(ref path) = emit_cwd {
+                    if let Ok(d) = std::env::current_dir() {
+                        let _ = std::fs::write(path, d.to_string_lossy().as_bytes());
+                    }
                 }
                 break;
             }
