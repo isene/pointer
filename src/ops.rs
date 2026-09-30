@@ -107,6 +107,7 @@ impl App {
         }
         let items = self.op_items();
         if items.is_empty() { return; }
+        self.tag_clear();
         let cwd = std::env::current_dir().unwrap_or_default();
         let total = items.len();
 
@@ -164,7 +165,6 @@ impl App {
                 s.undo_op = Some(UndoOp::Copy { created });
             }
         }));
-        self.tagged.clear();
     }
 
     /// Move tagged/selected items to current directory (async for multi-item)
@@ -175,6 +175,7 @@ impl App {
         }
         let items = self.op_items();
         if items.is_empty() { return; }
+        self.tag_clear();
         let cwd = std::env::current_dir().unwrap_or_default();
         let total = items.len();
 
@@ -189,7 +190,6 @@ impl App {
             } else {
                 self.msg_error("Move failed");
             }
-            self.tagged.clear();
             // Leave the directory listing alone — see copy_items() for why.
             return;
         }
@@ -224,7 +224,6 @@ impl App {
                 s.undo_op = Some(UndoOp::Move { moves });
             }
         }));
-        self.tagged.clear();
     }
 
     /// `d` — toggle the delete-flag on items (kastrup convention). With
@@ -412,6 +411,7 @@ impl App {
     pub fn link_items(&mut self) {
         let items = self.op_items();
         if items.is_empty() { return; }
+        self.tag_clear();
         let cwd = std::env::current_dir().unwrap_or_default();
         let mut created = Vec::new();
 
