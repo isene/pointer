@@ -54,6 +54,12 @@ pub struct App {
     pub sort_invert: bool,
     pub show_hidden: bool,
     pub long_format: bool,
+    /// Folder sizes (`B`): the totals of the tree that was counted, the
+    /// count that is still running, and whether the list on screen is
+    /// sorted by them.
+    pub sizes: Option<crate::sizes::Sizes>,
+    pub counting: Option<crate::sizes::Count>,
+    pub sizes_shown: bool,
     pub search_term: String,
     pub filter_ext: String,
     pub filter_regex: String,
@@ -114,6 +120,9 @@ impl App {
             sort_invert,
             show_hidden,
             long_format,
+            sizes: None,
+            counting: None,
+            sizes_shown: false,
             search_term: String::new(),
             filter_ext: String::new(),
             filter_regex: String::new(),
@@ -192,6 +201,7 @@ impl App {
                 self.files.retain(|e| e.is_dir || re.is_match(&e.name));
             }
         }
+        self.apply_sizes(&cwd);
 
         // Apply search highlights
         if !self.search_term.is_empty() {
@@ -349,6 +359,12 @@ impl App {
             } else {
                 format_short_entry(entry)
             };
+            // Folder sizes on: each row starts with what it takes on disk.
+            let name_part = if self.sizes_shown {
+                format!("{} {}", style::fg(&format!("{:>7}", format_size(entry.size)), 245), name_part)
+            } else {
+                name_part
+            };
 
             // RTFM style: → prefix + underline for selected, reverse for tagged, both if selected+tagged.
             // Delete-flag (kastrup-style) takes visual precedence: a dark-red
@@ -503,7 +519,9 @@ impl App {
         } else {
             String::new()
         };
-        let sort_msg = if self.sort_mode != SortMode::Name || self.sort_invert {
+        let sort_msg = if self.sizes_shown {
+            format!("[folder sizes{}] ", if self.sort_invert { " (reversed)" } else { "" })
+        } else if self.sort_mode != SortMode::Name || self.sort_invert {
             let inv = if self.sort_invert { " (reversed)" } else { "" };
             format!("[sort: {}{}] ", self.sort_mode.label(), inv)
         } else {
@@ -832,14 +850,15 @@ impl App {
         self.sort_mode = self.sort_mode.next();
         // Preview cache keys on path only; the right pane would otherwise
         // keep showing the previous sort's order until the dir is re-entered.
+        // No load_dir here: the caller's reload_and_render reads the folder
+        // and keeps the cursor on the same file. A reload here moved the
+        // cursor to another file first and left the old preview beside it.
         if let Ok(mut c) = self.preview_cache.lock() { c.clear(); }
-        self.load_dir();
     }
 
     pub fn toggle_sort_invert(&mut self) {
         self.sort_invert = !self.sort_invert;
         if let Ok(mut c) = self.preview_cache.lock() { c.clear(); }
-        self.load_dir();
     }
 
     pub fn toggle_preview(&mut self) {

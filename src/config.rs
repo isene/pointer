@@ -68,10 +68,6 @@ pub struct Config {
     pub preview_handlers: HashMap<String, String>,
     #[serde(default = "default_topmatch")]
     pub topmatch: Vec<(String, u16)>,
-    #[serde(default)]
-    pub ai_key: String,
-    #[serde(default = "default_ai_model")]
-    pub ai_model: String,
     #[serde(default = "default_syntax_theme")]
     pub syntax_theme: String,
     #[serde(default = "default_true")]
@@ -89,7 +85,6 @@ fn default_interactive() -> Vec<String> {
         .into_iter().map(String::from).collect()
 }
 fn default_topmatch() -> Vec<(String, u16)> { vec![("".into(), 249)] }
-fn default_ai_model() -> String { "gpt-4o-mini".into() }
 fn default_top_fg() -> u16 { 0 }
 fn default_top_bg() -> u16 { 249 }
 fn default_status_fg() -> u16 { 252 }
@@ -125,8 +120,6 @@ impl Default for Config {
             c_border_fg: 238,
             preview_handlers: HashMap::new(),
             topmatch: default_topmatch(),
-            ai_key: String::new(),
-            ai_model: default_ai_model(),
             syntax_theme: default_syntax_theme(),
             remember_positions: true,
         }

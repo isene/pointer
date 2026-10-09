@@ -9,6 +9,7 @@ impl App {
   k/UP        Move up\n\
   l/RIGHT/RET Enter directory / open file\n\
   x           Open file in the system default app (html → browser)\n\
+  Ctrl-X      Open with: pick the program, or make one the default\n\
   h/LEFT      Go to parent directory\n\
   g/HOME      Go to top\n\
   G/END       Go to bottom\n\
@@ -22,6 +23,7 @@ impl App {
   A           Toggle long format\n\
   o           Cycle sort (name/size/time/ext)\n\
   i           Invert sort order\n\
+  B           Folder sizes: count this tree, biggest first (B again: off)\n\
   w/W         Change pane width fwd/back\n\
   Ctrl-B      Cycle border style\n\
   -           Toggle preview pane\n\

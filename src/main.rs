@@ -8,10 +8,12 @@ mod git;
 mod help;
 mod image;
 mod marks;
+mod openwith;
 mod ops;
 mod plugin;
 mod preview;
 mod search;
+mod sizes;
 mod ssh;
 mod tabs;
 mod undo;
@@ -123,9 +125,10 @@ fn main() {
     loop {
         app.check_file_op();
         app.check_shell_cmd();
+        app.check_sizes();
         // 2-second idle refresh (1s during async ops) to catch filesystem
         // changes and drain completed background shell commands.
-        let timeout = if app.file_op_running() || app.shell_cmd_running() { Some(1) } else { Some(2) };
+        let timeout = if app.file_op_running() || app.shell_cmd_running() || app.sizes_running() { Some(1) } else { Some(2) };
         let key = match Input::getchr(timeout) {
             Some(k) => k,
             None => {
@@ -178,6 +181,7 @@ fn main() {
             "h" | "LEFT" | "C-LEFT" | "BACK" => { app.go_up_dir(); app.force_render_all(); }
             "l" | "RIGHT" | "C-RIGHT" => { app.enter(); app.force_render_all(); }
             "x" => { app.open_selected_force(); app.render(); }
+            "C-X" => { app.open_with(); }
             "PgDOWN" => { app.page_down(); app.render(); }
             "PgUP" => { app.page_up(); app.render(); }
             "END" => { app.go_bottom(); app.render(); }
@@ -194,6 +198,7 @@ fn main() {
             "a" => { app.toggle_hidden(); app.reload_and_render(); }
             "A" => { app.toggle_long_format(); app.render(); }
             "o" => { app.cycle_sort(); app.reload_and_render(); }
+            "B" => { app.toggle_sizes(); }
             "i" => { app.toggle_sort_invert(); app.reload_and_render(); }
             "O" => { app.show_sort_command(); }
 

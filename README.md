@@ -55,6 +55,8 @@ Press `?` for built-in help. Press `q` to quit (saves state).
 - **Archive browsing and editing** (zip, tar, gz, bz2, xz, rar, 7z as virtual directories — enter with ENTER/→, then `d` to delete, `D` to extract, `p` to paste in files tagged before entering)
 - **SSH/SFTP remote browsing** (Ctrl-E)
 - **Async file operations** with progress for large copy/move
+- **Folder sizes** (`B`): what every folder takes on disk, biggest first, and still there as you move into them
+- **Open with** (`Ctrl-X`): pick the program for a file, or make one the default for its type
 - **Comprehensive undo** (delete, move, rename, copy, symlink, permissions, bulk rename)
 - **Trash system** with toggle and browser
 - **Tab management** (create, close, switch, duplicate, rename)
@@ -99,6 +101,8 @@ Press `?` for built-in help. Press `q` to quit (saves state).
 | ~ | Home directory | - | Toggle preview |
 | ' | Jump to mark | _ | Toggle images |
 | > | Follow symlink | b | Toggle bat/internal syntax |
+| x | Open in the default app | B | Folder sizes, biggest first |
+| Ctrl-X | Open with: pick the program | | |
 | **Tags** | | **Search** | |
 | t | Tag/untag | / | Search filenames |
 | T | Show tagged | n/N | Next/prev match |
@@ -127,6 +131,25 @@ Press `?` for built-in help. Press `q` to quit (saves state).
 | Ctrl-Y | Copy right pane | H | Hash directory |
 | Ctrl-A | Claude session | S | System info |
 | Ctrl-L/Ctrl-R | Redraw/Refresh | I | Describe file (claude -p) |
+
+### Folder sizes (B)
+
+`B` counts the tree under the folder you are in and sorts the list by what each row takes on disk, biggest first.
+
+- The count runs beside pointer, so the keys keep working. The status line shows how far it is, and `B` stops it.
+- Move into a folder and its rows are sized already: one count covers the whole tree.
+- `i` puts the smallest first. `B` turns the sizes off.
+- The numbers are disk space, the way `du` counts. Links are not followed and other disks are not entered.
+- A count is a picture of the disk at that time. Press `B` twice to count again.
+
+### Open with (Ctrl-X)
+
+`Ctrl-X` on a file lists the programs that say they open its type, the default first.
+
+- A number opens the file with that program.
+- `o` lets you type any command; the file is added at its end.
+- `d` and a number makes that program the default for the type, so `x` and Enter use it from then on.
+- A program that needs the terminal gets it, when its desktop file says so or it is on the `interactive` list.
 
 ### Right Pane Scrolling
 
@@ -161,8 +184,6 @@ Plugins: `~/.pointer/plugins/`
   "c_top_fg": 0, "c_top_bg": 249,
   "c_status_fg": 252, "c_status_bg": 236,
   "topmatch": [["Projects", 171], ["Work", 72], ["", 249]],
-  "ai_key": "",
-  "ai_model": "gpt-4o-mini",
   "syntax_theme": "monokai",
   "remember_positions": true
 }
