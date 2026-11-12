@@ -122,14 +122,23 @@ fn main() {
     }
     app.render();
 
+    // The kernel says when the folder changes (inotify), so an idle
+    // pointer never wakes up. Without a watch it looks every 2 seconds.
+    let mut watch = crust::Watch::new();
     loop {
         app.check_file_op();
         app.check_shell_cmd();
         app.check_sizes();
-        // 2-second idle refresh (1s during async ops) to catch filesystem
-        // changes and drain completed background shell commands.
-        let timeout = if app.file_op_running() || app.shell_cmd_running() || app.sizes_running() { Some(1) } else { Some(2) };
+        let watching = watch.as_mut().is_some_and(|w| w.dir(&std::env::current_dir().unwrap_or_default()));
+        // Background work is checked once a second while it runs.
+        let timeout = if app.file_op_running() || app.shell_cmd_running() || app.sizes_running() { Some(1) }
+            else if watching { None } else { Some(2) };
         let key = match Input::getchr(timeout) {
+            Some(k) if k == "WATCH" => {
+                if let Some(w) = watch.as_mut() { w.drain(); }
+                if app.dir_changed() { app.reload_and_render(); }
+                continue;
+            }
             Some(k) => k,
             None => {
                 // Only reload if directory actually changed (avoids unnecessary work)

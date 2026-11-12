@@ -1,6 +1,6 @@
 [package]
 name = "pointer"
-version = "0.1.67"
+version = "0.1.68"
 edition = "2021"
 authors = ["Geir Isene <g@isene.com>"]
 description = "Fast terminal file manager. Feature clone of RTFM, built on crust."
@@ -17,3 +17,7 @@ libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 regex = "1"
+
+# Linux only: the idle test reads /proc.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+still = { version = "0.1", package = "fe2o3-still" }

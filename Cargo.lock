@@ -126,7 +126,7 @@ dependencies = [
 
 [[package]]
 name = "fe2o3-crust"
-version = "0.1.74"
+version = "0.1.75"
 dependencies = [
  "crossterm",
  "libc",
@@ -148,6 +148,15 @@ version = "0.1.11"
 dependencies = [
  "fe2o3-crust",
  "regex",
+]
+
+[[package]]
+name = "fe2o3-still"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e87a057aca8f9050f31e90fbaa2bb992fa968b78b52a3d2589cbfd2c957c940"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -328,11 +337,12 @@ dependencies = [
 
 [[package]]
 name = "pointer"
-version = "0.1.67"
+version = "0.1.68"
 dependencies = [
  "fe2o3-crust",
  "fe2o3-glow",
  "fe2o3-highlight",
+ "fe2o3-still",
  "libc",
  "regex",
  "serde",
