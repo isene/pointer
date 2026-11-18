@@ -529,8 +529,8 @@ impl App {
         };
         let left = format!(" {}{}{}: for command (use @s for selected item, @t for tagged items) - press ? for help",
             filter_msg, tag_msg, sort_msg);
-        let version = format!("pointer v{}", env!("CARGO_PKG_VERSION"));
-        let pad = (self.cols as usize).saturating_sub(crust::display_width(&left) + version.len() + 1);
+        let version = crust::version_tag("pointer", env!("CARGO_PKG_VERSION"));
+        let pad = (self.cols as usize).saturating_sub(crust::display_width(&left) + crust::display_width(&version));
         self.status.set_text(&format!("{}{}{}", left, " ".repeat(pad), version));
         self.status.full_refresh();
     }
