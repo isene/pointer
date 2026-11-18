@@ -269,7 +269,7 @@ impl App {
         self.show_in_right(&lines.join("\n"));
         self.status.say(&style::fg(&format!(" Delete {} item(s) from archive? (y/n)", paths.len()), 196));
 
-        let Some(key) = crust::Input::getchr(None) else { return };
+        let Some(key) = crate::app::modal_key() else { return };
         if key != "y" && key != "Y" {
             self.msg_cancel();
             return;
@@ -384,7 +384,7 @@ impl App {
         self.show_in_right(&lines.join("\n"));
         self.status.say(&style::fg(&format!(" Add {} file(s) to archive? (y/n)", files.len()), 226));
 
-        let Some(key) = crust::Input::getchr(None) else { return };
+        let Some(key) = crate::app::modal_key() else { return };
         if key != "y" && key != "Y" {
             self.msg_cancel();
             return;

@@ -1,6 +1,6 @@
 [package]
 name = "pointer"
-version = "0.1.69"
+version = "0.1.70"
 edition = "2021"
 authors = ["Geir Isene <g@isene.com>"]
 description = "Fast terminal file manager. Feature clone of RTFM, built on crust."
@@ -8,7 +8,7 @@ license = "Unlicense"
 repository = "https://github.com/isene/pointer"
 
 [dependencies]
-crust = { version = "0.1", path = "../crust", package = "fe2o3-crust" }
+crust = { version = "0.1.80", path = "../crust", package = "fe2o3-crust" }
 glow = { version = "0.1", path = "../glow", package = "fe2o3-glow" }
 highlight = { version = "0.1", path = "../highlight", package = "fe2o3-highlight" }
 # Note: fe2o3-crust exports as "crust", fe2o3-glow exports as "glow",

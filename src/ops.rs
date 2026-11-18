@@ -299,7 +299,7 @@ impl App {
         if self.config.confirm_delete {
             let action = if self.config.trash { "Move to trash" } else { "Delete permanently" };
             self.status.say(&style::fg(&format!(" {}? (y/n)", action), 220));
-            let Some(key) = crust::Input::getchr(None) else { return };
+            let Some(key) = crate::app::modal_key() else { return };
             if key != "y" && key != "Y" {
                 self.msg_cancel();
                 self.prev_selected = None;
@@ -541,7 +541,7 @@ impl App {
         preview_lines.push(format!("{} rename(s). Confirm? (y/n)", renames.len()));
         self.show_in_right(&preview_lines.join("\n"));
 
-        let Some(key) = crust::Input::getchr(None) else { return };
+        let Some(key) = crate::app::modal_key() else { return };
         if key != "y" && key != "Y" { self.msg_cancel(); return; }
 
         let mut done = 0;

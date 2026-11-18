@@ -9,6 +9,14 @@ use std::sync::{Arc, Mutex};
 use crate::config::{Config, State};
 use crate::entry::{self, DirEntry, SortMode, format_size, format_mode, format_time};
 use crate::preview;
+
+/// A key for a screen or prompt inside pointer. The folder watch is off
+/// while it waits: a change in the folder would come back at once as
+/// "WATCH", again and again, and a loop that waits for a real key would
+/// keep a core busy.
+pub fn modal_key() -> Option<String> {
+    crust::Input::without_wake(|| crust::Input::getchr(None))
+}
 use crate::tabs::Tab;
 use crate::undo::UndoOp;
 
@@ -941,7 +949,6 @@ impl App {
     // --- Config management ---
 
     pub fn show_config(&mut self) {
-        use crust::Input;
         let themes = highlight::available_themes();
         let sort_modes = ["name", "size", "time", "ext"];
         let border_modes = ["0: none", "1: right", "2: both", "3: left"];
@@ -1005,7 +1012,7 @@ impl App {
 
             self.show_in_right(&lines.join("\n"));
 
-            let Some(key) = Input::getchr(None) else { break };
+            let Some(key) = crate::app::modal_key() else { break };
             match key.as_str() {
                 "ESC" | "q" | "C" => {
                     self.unlock_right_pane();
@@ -1150,7 +1157,7 @@ impl App {
                     if let Ok(content) = std::fs::read_to_string(&path) {
                         self.show_in_right(&content);
                     }
-                    if let Some(k) = Input::getchr(None) {
+                    if let Some(k) = crate::app::modal_key() {
                         if k == "ESC" || k == "q" { continue; }
                     }
                 }

@@ -1,5 +1,5 @@
 use crate::app::App;
-use crust::{style, Input};
+use crust::style;
 use std::process::Command;
 
 impl App {
@@ -271,7 +271,7 @@ impl App {
         if items.is_empty() {
             lines.push(style::fg("No recent files or directories", 245));
             self.show_in_right(&lines.join("\n"));
-            let _ = Input::getchr(None);
+            let _ = crate::app::modal_key();
             return;
         }
         self.show_in_right(&lines.join("\n"));
@@ -283,7 +283,7 @@ impl App {
         // for ENTER or another digit.
         let mut buf = String::new();
         let picked_idx: Option<usize> = loop {
-            let Some(key) = Input::getchr(None) else { break None };
+            let Some(key) = crate::app::modal_key() else { break None };
             match key.as_str() {
                 "ESC" | "C-R" => break None,
                 "ENTER" => {
@@ -461,7 +461,7 @@ impl App {
 
             // Wait for action
             loop {
-                let Some(key) = crust::Input::getchr(None) else { break };
+                let Some(key) = crate::app::modal_key() else { break };
                 match key.as_str() {
                     "E" => {
                         let count = items.len();

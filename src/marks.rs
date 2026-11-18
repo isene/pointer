@@ -1,6 +1,5 @@
 use crate::app::App;
 use crust::style;
-use crust::Input;
 use std::env;
 
 impl App {
@@ -11,13 +10,13 @@ impl App {
         self.status.say(&style::fg(" Set mark (letter) or -letter to delete:", 220));
 
         // Single keypress
-        let Some(key) = Input::getchr(None) else { return };
+        let Some(key) = crate::app::modal_key() else { return };
         if key == "ESC" { return; }
 
         // Delete mark: if '-', wait for letter
         if key == "-" {
             self.status.say(&style::fg(" Delete mark (press letter):", 220));
-            let Some(del_key) = Input::getchr(None) else { return };
+            let Some(del_key) = crate::app::modal_key() else { return };
             if del_key == "ESC" { return; }
             if self.state.marks.remove(&del_key).is_some() {
                 self.msg_success(&format!("Mark '{}' deleted", del_key));
@@ -41,7 +40,7 @@ impl App {
     pub fn jump_to_mark(&mut self) {
         self.show_marks_display();
 
-        let Some(key) = Input::getchr(None) else { self.unlock_right_pane(); return };
+        let Some(key) = crate::app::modal_key() else { self.unlock_right_pane(); return };
         if key == "ESC" { self.unlock_right_pane(); return; }
 
         if let Some(path) = self.state.marks.get(&key).cloned() {

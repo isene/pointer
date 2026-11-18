@@ -3,7 +3,7 @@
 //! pressed and at no other time.
 
 use crate::app::App;
-use crust::{style, Input};
+use crust::style;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -159,11 +159,11 @@ impl App {
         self.show_in_right(&lines.join("\n"));
 
         let pick = |key: &str| key.parse::<usize>().ok().filter(|n| (1..=programs.len()).contains(n)).map(|n| n - 1);
-        let Some(key) = Input::getchr(None) else { return };
+        let Some(key) = crate::app::modal_key() else { return };
         // `d` reads its number while the list is still on screen.
         let new_default = if key == "d" && !kind.is_empty() {
             self.msg_info("Default: press the number of the program");
-            Input::getchr(None).and_then(|k| pick(&k))
+            crate::app::modal_key().and_then(|k| pick(&k))
         } else {
             None
         };
