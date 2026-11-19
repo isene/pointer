@@ -102,13 +102,15 @@ fn preview_dir(
         path, show_hidden, sort_mode, sort_invert, &ls_colors, &[], &[],
     );
     if entries.is_empty() {
-        // Fallback path for permission-denied / missing-dir cases.
+        // Fallback path for permission-denied / missing-dir cases, and for a
+        // folder that has only hidden entries (shown empty while hidden is off).
         let Ok(items) = fs::read_dir(path) else {
             return "Cannot read directory".into();
         };
         let mut names: Vec<String> = items
             .flatten()
             .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|n| show_hidden || !n.starts_with('.'))
             .collect();
         names.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
         return names.join("\n");
@@ -573,4 +575,20 @@ pub fn is_archive_ext(ext: &str) -> bool {
         "zip" | "tar" | "gz" | "tgz" | "bz2" | "tbz2" | "xz" | "txz" |
         "rar" | "7z" | "jar" | "war"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_folder_of_only_hidden_entries_previews_empty_while_hidden_is_off() {
+        let dir = std::env::temp_dir().join(format!("pointer-hidden-{}", std::process::id()));
+        fs::create_dir_all(dir.join(".claude")).unwrap();
+        fs::write(dir.join(".1"), "x").unwrap();
+        let sort = crate::entry::SortMode::Name;
+        assert_eq!(preview_dir(&dir, false, sort, false), "");
+        assert!(preview_dir(&dir, true, sort, false).contains(".claude"));
+        fs::remove_dir_all(&dir).unwrap();
+    }
 }
