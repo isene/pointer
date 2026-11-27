@@ -57,7 +57,10 @@ impl App {
             });
 
             if plugin.interactive {
-                // Interactive: give the script the full terminal
+                // Interactive: give the script the full terminal. It may
+                // write a place to come back to in POINTER_PICK.
+                let pick = pick_file();
+                let _ = fs::remove_file(&pick);
                 crust::Crust::cleanup();
                 let _ = std::process::Command::new("sh")
                     .arg("-c")
@@ -65,10 +68,16 @@ impl App {
                     .env("POINTER_CONTEXT", context.to_string())
                     .env("POINTER_SELECTED", &selected)
                     .env("POINTER_DIR", &cwd)
+                    .env("POINTER_PICK", &pick)
                     .status();
                 crust::Crust::init();
                 crust::Crust::clear_screen();
                 self.resize();
+                if let Some((dir, name, open)) = fs::read_to_string(&pick).ok().as_deref().and_then(read_pick) {
+                    let _ = fs::remove_file(&pick);
+                    self.go_to(&dir, &name);
+                    if open { self.enter(); }
+                }
             } else {
                 let output = std::process::Command::new("sh")
                     .arg("-c")
@@ -89,6 +98,23 @@ impl App {
         }
         false
     }
+}
+
+/// Where an interactive plugin may leave a place to go back to: in the
+/// user's own runtime folder when there is one, which no one else can
+/// write to.
+fn pick_file() -> PathBuf {
+    let dir = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).filter(|d| d.is_dir()).unwrap_or_else(std::env::temp_dir);
+    dir.join(format!("pointer-pick-{}", std::process::id()))
+}
+
+/// A pick: the folder on the first line, the name to put the cursor on
+/// on the second, and `open` on the third when it should open.
+fn read_pick(text: &str) -> Option<(PathBuf, String, bool)> {
+    let mut lines = text.lines();
+    let dir = lines.next().filter(|d| !d.is_empty())?;
+    let name = lines.next().unwrap_or("").to_string();
+    Some((PathBuf::from(dir), name, lines.next() == Some("open")))
 }
 
 fn scan_plugins() -> Vec<Plugin> {
@@ -114,4 +140,17 @@ fn scan_plugins() -> Vec<Plugin> {
         }
     }
     plugins
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_pick_names_the_folder_the_cursor_and_whether_to_open() {
+        assert_eq!(read_pick("/tmp/x\na.rs\nopen\n"), Some((PathBuf::from("/tmp/x"), "a.rs".into(), true)));
+        assert_eq!(read_pick("/tmp/x\na.rs\n"), Some((PathBuf::from("/tmp/x"), "a.rs".into(), false)));
+        assert_eq!(read_pick("/tmp/x"), Some((PathBuf::from("/tmp/x"), String::new(), false)));
+        assert_eq!(read_pick(""), None);
+    }
 }

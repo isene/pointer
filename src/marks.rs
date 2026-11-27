@@ -153,25 +153,24 @@ impl App {
             entry.path.parent().unwrap_or(std::path::Path::new("/")).join(&target)
         };
         if resolved.is_dir() {
-            self.save_dir_index();
-            let _ = env::set_current_dir(&resolved);
-            self.index = 0;
-            self.scroll_ix = 0;
-            self.prev_selected = None;
-            self.load_dir();
+            self.go_to(&resolved, "");
         } else if let Some(parent) = resolved.parent() {
-            self.save_dir_index();
-            let _ = env::set_current_dir(parent);
-            self.index = 0;
-            self.scroll_ix = 0;
-            self.prev_selected = None;
-            self.load_dir();
-            let name = resolved.file_name().map(|n| n.to_string_lossy().to_string());
-            if let Some(name) = name {
-                if let Some(pos) = self.files.iter().position(|e| e.name == name) {
-                    self.index = pos;
-                }
-            }
+            let name = resolved.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            self.go_to(parent, &name);
+        }
+    }
+
+    /// Go to `dir` with the cursor on `name`, when it is there.
+    pub fn go_to(&mut self, dir: &std::path::Path, name: &str) {
+        if !dir.is_dir() { return; }
+        self.save_dir_index();
+        let _ = env::set_current_dir(dir);
+        self.index = 0;
+        self.scroll_ix = 0;
+        self.prev_selected = None;
+        self.load_dir();
+        if let Some(pos) = self.files.iter().position(|e| e.name == name) {
+            self.index = pos;
         }
     }
 }

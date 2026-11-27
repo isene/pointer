@@ -236,6 +236,8 @@ Plugins live in `~/.pointer/plugins/`. Each plugin is a JSON manifest (`.json` f
 
 Commands receive `POINTER_CONTEXT` env var with JSON state. Unmatched keys fall through to plugin dispatch, so plugins can bind any free key.
 
+An interactive plugin can tell pointer where to go when it quits. It gets a file path in `POINTER_PICK` and may write three lines there: the folder, the name to put the cursor on, and `open` when that item should open.
+
 ## Part of the Rust Terminal Suite (Fe2O3)
 
 See the [Fe₂O₃ suite overview](https://github.com/isene/fe2o3) and the [landing page](https://isene.org/fe2o3/) for the full list of projects.
