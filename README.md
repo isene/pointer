@@ -236,7 +236,7 @@ Plugins live in `~/.pointer/plugins/`. Each plugin is a JSON manifest (`.json` f
 
 Commands receive `POINTER_CONTEXT` env var with JSON state. Unmatched keys fall through to plugin dispatch, so plugins can bind any free key.
 
-An interactive plugin can tell pointer where to go when it quits. It gets a file path in `POINTER_PICK` and may write three lines there: the folder, the name to put the cursor on, and `open` when that item should open.
+An interactive plugin can tell pointer where to go when it quits. It gets a file path in `POINTER_PICK` and may write three lines there: the folder, the name to put the cursor on, and `open` when that item should open. The 3D city [neon](https://github.com/isene/neon) uses this on `Ctrl-W`.
 
 ## Part of the Rust Terminal Suite (Fe2O3)
 
